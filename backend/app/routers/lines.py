@@ -1,47 +1,51 @@
 from fastapi import APIRouter, HTTPException
-from app.models.line import TrendLine, HorizontalLine
+from app.models.line import LineCreate, LineUpdate
 from app.database import get_supabase
 
 router = APIRouter(prefix="/lines", tags=["lines"])
 
 
-@router.post("/trend")
-async def save_trend_line(line: TrendLine):
+@router.post("/")
+async def create_line(line: LineCreate):
+    """선 저장 (추세선 / 수평선 공통)"""
     db = get_supabase()
-    result = db.table("trend_lines").insert(line.model_dump()).execute()
+    result = db.table("lines").insert(line.model_dump()).execute()
+    if not result.data:
+        raise HTTPException(status_code=500, detail="선 저장 실패")
+    return result.data[0]
+
+
+@router.get("/{stock_code}")
+async def get_lines(stock_code: str):
+    """특정 종목의 모든 선 조회"""
+    db = get_supabase()
+    result = (
+        db.table("lines")
+        .select("*")
+        .eq("stock_code", stock_code)
+        .eq("is_active", True)
+        .order("created_at", desc=True)
+        .execute()
+    )
     return result.data
 
 
-@router.get("/trend/{symbol}")
-async def get_trend_lines(symbol: str):
+@router.patch("/{line_id}")
+async def update_line(line_id: str, body: LineUpdate):
+    """선 부분 수정 (이름, 민감도, 활성 여부)"""
     db = get_supabase()
-    result = db.table("trend_lines").select("*").eq("symbol", symbol).execute()
-    return result.data
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="수정할 항목이 없습니다")
+    result = db.table("lines").update(updates).eq("id", line_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="선을 찾을 수 없습니다")
+    return result.data[0]
 
 
-@router.delete("/trend/{line_id}")
-async def delete_trend_line(line_id: int):
+@router.delete("/{line_id}")
+async def delete_line(line_id: str):
+    """선 삭제"""
     db = get_supabase()
-    db.table("trend_lines").delete().eq("id", line_id).execute()
-    return {"deleted": line_id}
-
-
-@router.post("/horizontal")
-async def save_horizontal_line(line: HorizontalLine):
-    db = get_supabase()
-    result = db.table("horizontal_lines").insert(line.model_dump()).execute()
-    return result.data
-
-
-@router.get("/horizontal/{symbol}")
-async def get_horizontal_lines(symbol: str):
-    db = get_supabase()
-    result = db.table("horizontal_lines").select("*").eq("symbol", symbol).execute()
-    return result.data
-
-
-@router.delete("/horizontal/{line_id}")
-async def delete_horizontal_line(line_id: int):
-    db = get_supabase()
-    db.table("horizontal_lines").delete().eq("id", line_id).execute()
+    db.table("lines").delete().eq("id", line_id).execute()
     return {"deleted": line_id}

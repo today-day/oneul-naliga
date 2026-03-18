@@ -1,111 +1,203 @@
 import { useState } from "react";
 
 const B = "var(--border-tertiary)";
+const TIMEFRAMES = ["일봉", "주봉", "월봉", "60분", "30분"];
+const SENSITIVITY_LABELS = ["±0.3%", "±0.5%", "±0.7%", "±1.0%", "±1.5%"];
+const SENSITIVITY_VALUES = [0.3, 0.5, 0.7, 1.0, 1.5];
 
-export default function AddLineModal({ onClose, onSave, preselectedType = null }) {
+export default function AddLineModal({
+  onClose,
+  onSave,
+  preselectedType = null,   // "trend" | "horizontal" | null
+  defaultTimeframe = "일봉",
+}) {
   const [tab, setTab] = useState(preselectedType || "trend");
   const [lineName, setLineName] = useState("");
   const [signalType, setSignalType] = useState("loss");
+  const [timeframe, setTimeframe] = useState(defaultTimeframe);
   const [price, setPrice] = useState("");
+  const [sensitivityIdx, setSensitivityIdx] = useState(1); // default 0.5%
 
   const handleSave = () => {
     if (tab === "horizontal" && !price) return;
     onSave({
+      line_type: tab,
       name: lineName || (tab === "trend" ? "추세선" : "수평선"),
-      type: tab,
-      signalType,
-      color: signalType === "loss" ? "#ef4444" : "#10b981",
-      targetPrice: tab === "horizontal" ? Number(price) : null,
-      distance: null,
+      signal_type: signalType,
+      timeframe,
+      sensitivity: SENSITIVITY_VALUES[sensitivityIdx],
+      price: tab === "horizontal" ? Number(price) : null,
     });
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.3)", backdropFilter: "blur(4px)" }} />
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", backdropFilter: "blur(4px)" }} />
 
-      <div style={{ position: "relative", background: "var(--color-background-primary)", border: B, borderRadius: 16, width: "100%", maxWidth: 480, margin: "0 16px", overflow: "hidden" }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: B }}>
-          <span style={{ fontSize: 15, fontWeight: 500, color: "var(--color-text-primary)" }}>선 추가</span>
-          <span onClick={onClose} style={{ fontSize: 18, color: "var(--color-text-tertiary)", cursor: "pointer", lineHeight: 1 }}>×</span>
+      {/* 바텀시트 스타일 */}
+      <div style={{
+        position: "relative",
+        background: "var(--color-background-primary)",
+        borderRadius: "20px 20px 0 0",
+        width: "100%", maxWidth: 480,
+        overflow: "hidden",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      }}>
+        {/* 핸들 */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--color-border-secondary)" }} />
         </div>
 
-        <div style={{ padding: 20 }}>
-          {/* Tabs */}
+        {/* 헤더 */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 20px 12px", borderBottom: B }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "var(--color-text-primary)" }}>선 추가</span>
+          <span onClick={onClose} style={{ fontSize: 20, color: "var(--color-text-tertiary)", cursor: "pointer", lineHeight: 1 }}>×</span>
+        </div>
+
+        <div style={{ padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* 선 종류 탭 */}
           {!preselectedType && (
-            <div style={{ display: "flex", gap: 0, marginBottom: 20, border: B, borderRadius: 8, overflow: "hidden" }}>
-              <button
-                onClick={() => setTab("trend")}
-                style={{ flex: 1, padding: 10, fontSize: 13, fontWeight: tab === "trend" ? 500 : 400, background: tab === "trend" ? "var(--color-background-warning)" : "var(--color-background-primary)", color: tab === "trend" ? "var(--color-text-warning)" : "var(--color-text-secondary)", border: "none", cursor: "pointer" }}
-              >
-                추세선 (두 점 클릭)
-              </button>
-              <button
-                onClick={() => setTab("horizontal")}
-                style={{ flex: 1, padding: 10, fontSize: 13, fontWeight: tab === "horizontal" ? 500 : 400, background: tab === "horizontal" ? "var(--color-background-warning)" : "var(--color-background-primary)", color: tab === "horizontal" ? "var(--color-text-warning)" : "var(--color-text-secondary)", border: "none", borderLeft: B, cursor: "pointer" }}
-              >
-                수평선 (가격 입력)
-              </button>
+            <div>
+              <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 8 }}>선 종류</label>
+              <div style={{ display: "flex", border: B, borderRadius: 10, overflow: "hidden" }}>
+                {[
+                  { key: "trend", label: "추세선" },
+                  { key: "horizontal", label: "수평선" },
+                ].map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setTab(key)}
+                    style={{
+                      flex: 1, padding: "10px 0", fontSize: 14, fontWeight: tab === key ? 600 : 400,
+                      background: tab === key ? "var(--color-text-primary)" : "transparent",
+                      color: tab === key ? "white" : "var(--color-text-secondary)",
+                      border: "none", cursor: "pointer",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
           {/* 추세선 안내 */}
           {tab === "trend" && (
-            <div style={{ background: "var(--color-background-secondary)", borderRadius: 8, padding: "12px 14px", marginBottom: 16 }}>
+            <div style={{ background: "var(--color-background-secondary)", borderRadius: 10, padding: "12px 14px" }}>
               {preselectedType ? (
-                <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-success)", fontWeight: 500 }}>✓ 차트에서 두 점이 선택됐습니다. 선 정보를 입력하세요.</p>
+                <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-success)", fontWeight: 500 }}>✓ 두 점이 선택됐습니다. 선 정보를 입력하세요.</p>
               ) : (
-                <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>"차트에서 선 긋기 시작" 버튼을 눌러 두 점을 클릭하면 자동으로 열립니다.</p>
+                <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-secondary)" }}>차트에서 두 고점을 클릭하거나, 고점 탐지 탭에서 선택하세요.</p>
               )}
             </div>
           )}
 
           {/* 수평선 가격 */}
           {tab === "horizontal" && (
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 6 }}>지지/저항 가격 (원)</label>
+            <div>
+              <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 8 }}>지지 / 저항 가격</label>
               <input
                 type="number"
                 placeholder="예: 70000"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                style={{ width: "100%", fontSize: 15, fontWeight: 500, padding: "10px 12px", border: B, borderRadius: 8, outline: "none", boxSizing: "border-box", color: "var(--color-text-primary)" }}
+                style={{
+                  width: "100%", fontSize: 16, fontWeight: 600, padding: "12px 14px",
+                  border: B, borderRadius: 10, outline: "none", boxSizing: "border-box",
+                  color: "var(--color-text-primary)", background: "var(--color-background-secondary)",
+                }}
               />
             </div>
           )}
 
+          {/* 봉 종류 */}
+          <div>
+            <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 8 }}>봉 종류</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {TIMEFRAMES.map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => setTimeframe(tf)}
+                  style={{
+                    padding: "7px 14px", fontSize: 13, borderRadius: 20, border: B,
+                    fontWeight: timeframe === tf ? 600 : 400,
+                    background: timeframe === tf ? "var(--color-text-primary)" : "transparent",
+                    color: timeframe === tf ? "white" : "var(--color-text-secondary)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 신호 종류 */}
+          <div>
+            <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 8 }}>신호 종류</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[
+                { key: "loss", label: "로스 지점", activeBorder: "var(--color-border-danger)", activeBg: "var(--color-background-danger)", activeColor: "var(--color-text-danger)" },
+                { key: "attack", label: "공격 지점", activeBorder: "var(--color-border-success)", activeBg: "var(--color-background-success)", activeColor: "var(--color-text-success)" },
+              ].map(({ key, label, activeBorder, activeBg, activeColor }) => (
+                <label key={key} style={{
+                  flex: 1, display: "flex", alignItems: "center", gap: 8, padding: "11px 12px",
+                  borderRadius: 10, cursor: "pointer",
+                  border: signalType === key ? `2px solid ${activeBorder}` : B,
+                  background: signalType === key ? activeBg : "transparent",
+                }}>
+                  <input type="radio" name="signal" checked={signalType === key} onChange={() => setSignalType(key)} style={{ display: "none" }} />
+                  <div style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${signalType === key ? activeBorder : "var(--color-border-primary)"}`, background: signalType === key ? activeBorder : "transparent", flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, fontWeight: signalType === key ? 600 : 400, color: signalType === key ? activeColor : "var(--color-text-secondary)" }}>{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* 선 이름 */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 6 }}>선 이름</label>
+          <div>
+            <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 8 }}>선 이름 (선택)</label>
             <input
               type="text"
               placeholder={tab === "trend" ? "예: 1월 고점 저항선" : "예: 1월 저점 지지선"}
               value={lineName}
               onChange={(e) => setLineName(e.target.value)}
-              style={{ width: "100%", fontSize: 13, padding: "9px 12px", border: B, borderRadius: 8, outline: "none", boxSizing: "border-box", color: "var(--color-text-primary)" }}
+              style={{
+                width: "100%", fontSize: 14, padding: "11px 14px", border: B,
+                borderRadius: 10, outline: "none", boxSizing: "border-box",
+                color: "var(--color-text-primary)", background: "var(--color-background-secondary)",
+              }}
             />
           </div>
 
-          {/* 신호 종류 */}
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 6 }}>신호 종류</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <label style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: 10, borderRadius: 8, border: signalType === "loss" ? "2px solid var(--color-border-danger)" : B, background: signalType === "loss" ? "var(--color-background-danger)" : "var(--color-background-primary)", cursor: "pointer" }}>
-                <input type="radio" name="signal" checked={signalType === "loss"} onChange={() => setSignalType("loss")} style={{ accentColor: "#dc2626" }} />
-                <span style={{ fontSize: 13, color: signalType === "loss" ? "var(--color-text-danger)" : "var(--color-text-secondary)", fontWeight: signalType === "loss" ? 500 : 400 }}>로스 지점</span>
-              </label>
-              <label style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, padding: 10, borderRadius: 8, border: signalType === "attack" ? "2px solid var(--color-border-success)" : B, background: signalType === "attack" ? "var(--color-background-success)" : "var(--color-background-primary)", cursor: "pointer" }}>
-                <input type="radio" name="signal" checked={signalType === "attack"} onChange={() => setSignalType("attack")} style={{ accentColor: "#16a34a" }} />
-                <span style={{ fontSize: 13, color: signalType === "attack" ? "var(--color-text-success)" : "var(--color-text-secondary)", fontWeight: signalType === "attack" ? 500 : 400 }}>공격 지점</span>
-              </label>
+          {/* 민감도 */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+              <label style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>알림 민감도</label>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)" }}>{SENSITIVITY_LABELS[sensitivityIdx]}</span>
+            </div>
+            <input
+              type="range" min={0} max={4} value={sensitivityIdx}
+              onChange={(e) => setSensitivityIdx(Number(e.target.value))}
+              style={{ width: "100%", accentColor: "var(--color-text-info)" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+              <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>정밀 ±0.3%</span>
+              <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>여유 ±1.5%</span>
             </div>
           </div>
 
-          {/* Actions */}
+          {/* 저장 버튼 */}
           <button
             onClick={handleSave}
-            style={{ width: "100%", padding: 12, fontSize: 14, fontWeight: 500, background: "#f59e0b", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}
+            disabled={tab === "horizontal" && !price}
+            style={{
+              width: "100%", padding: "14px 0", fontSize: 15, fontWeight: 700,
+              background: "var(--color-text-primary)", color: "white",
+              border: "none", borderRadius: 12, cursor: "pointer",
+              opacity: tab === "horizontal" && !price ? 0.4 : 1,
+            }}
           >
             선 저장하기
           </button>

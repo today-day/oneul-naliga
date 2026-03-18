@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(uv sync:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(source /c/Users/choiy/Desktop/oneul-naliga/backend/.venv/Scripts/activate)",
+      "Bash(uv add:*)",
+      "Bash(npm run:*)",
+      "Bash(uv run:*)"
     ]
   }
 }

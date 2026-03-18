@@ -1,238 +1,583 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useLivePrices } from "../hooks/useLivePrice";
 
-const mockStocks = [
-  { id: 1, name: "삼성전자", code: "005930", market: "KR", price: 72400, change: 1.26, lineCount: 2, distanceToBound: { type: "저항선", value: 1.8 } },
-  { id: 2, name: "카카오", code: "035720", market: "KR", price: 38150, change: -0.78, lineCount: 1, distanceToBound: { type: "지지선", value: -0.4 } },
-  { id: 3, name: "NAVER", code: "035420", market: "KR", price: 189500, change: 0.53, lineCount: 3, distanceToBound: { type: "저항선", value: 3.2 } },
-  { id: 4, name: "Apple", code: "AAPL", market: "US", price: 224.5, change: -0.43, lineCount: 2, distanceToBound: { type: "지지선", value: -0.9 } },
+function useBreakpoint() {
+  const get = () => window.innerWidth < 768 ? "mobile" : window.innerWidth < 1100 ? "tablet" : "pc";
+  const [bp, setBp] = useState(get);
+  useEffect(() => {
+    const h = () => setBp(get());
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, []);
+  return bp;
+}
+import { getWatchlist, addStock, removeStock, getPrice, detectMarket, searchStocks, getRanking, getIndices, getFX } from "../api/stocks";
+import { MARKET_ITEMS, loadMarketSettings, saveMarketSettings } from "../config/marketItems";
+import { getLines } from "../api/lines";
+
+// 미국 지수는 실제 API 미연결 → mock
+const MOCK_US = {
+  SP500:  { value: 5432.10,  change_pct: "+0.21" },
+  NASDAQ: { value: 17234.50, change_pct: "+0.35" },
+  DOW:    { value: 43521.30, change_pct: "-0.08" },
+};
+const RANKING_TABS = [
+  { type: "view",        label: "조회" },
+  { type: "volume",      label: "거래량" },
+  { type: "amount",      label: "거래대금" },
+  { type: "surge",       label: "거래급증" },
+  { type: "rise",        label: "상승" },
+  { type: "fall",        label: "하락" },
+  { type: "foreign",     label: "외인" },
+  { type: "institution", label: "기관" },
+  { type: "etf",         label: "ETF" },
 ];
 
-const mockAlerts = [
-  { id: 1, stock: "카카오", msg: "지지선 근접", distance: "-0.4%", type: "loss", time: "오늘 14:32" },
-  { id: 2, stock: "삼성전자", msg: "저항선 돌파", distance: null, type: "attack", time: "오늘 09:17" },
-  { id: 3, stock: "NAVER", msg: "저항선 근접", distance: "+0.3%", type: "loss", time: "어제 15:50" },
-];
+const B = "0.5px solid var(--color-border-tertiary)";
 
-const NAV_ITEMS = ["홈", "차트", "알림 로그", "설정"];
-const B = "var(--border-tertiary)";
+function ChangeText({ change, style }) {
+  return (
+    <span style={{ fontSize: 12, fontWeight: 500, color: change >= 0 ? "var(--color-text-success)" : "var(--color-text-danger)", ...style }}>
+      {change >= 0 ? "+" : ""}{change}%
+    </span>
+  );
+}
+
+function SectionTitle({ title, action, onAction }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text-primary)", letterSpacing: "-0.3px" }}>{title}</span>
+      {action && (
+        <button onClick={onAction} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "var(--color-text-info)", fontWeight: 500, padding: 0 }}>
+          {action}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// 인기 종목 섹션 (탭 + 리스트)
+function PopularSection({ isMobile, isPC, navigate }) {
+  const [activeTab, setActiveTab] = useState("view");
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setExpanded(false);
+    getRanking(activeTab)
+      .then(setItems)
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [activeTab]);
+
+  const priceFmt = (price) => {
+    if (price == null || price === 0) return "—";
+    return price.toLocaleString() + "원";
+  };
+
+  const changeColor = (pct) => {
+    if (!pct) return "var(--color-text-tertiary)";
+    return pct.startsWith("-") ? "var(--color-text-danger)" : "var(--color-text-success)";
+  };
+
+  const pad = isMobile ? "0 20px" : isPC ? "0" : "0 24px";
+
+  return (
+    <section style={{ paddingTop: 20 }}>
+      <div style={{ padding: pad }}>
+        <SectionTitle title="인기 종목" />
+      </div>
+
+      {/* 탭 */}
+      <div className="hide-scrollbar" style={{ display: "flex", gap: 6, overflowX: "auto", padding: isMobile ? "0 20px 10px" : isPC ? "0 0 10px" : "0 24px 10px" }}>
+        {RANKING_TABS.map(({ type, label }) => (
+          <button key={type} onClick={() => setActiveTab(type)}
+            style={{
+              flexShrink: 0, padding: "5px 12px", fontSize: 12, borderRadius: 20, border: B,
+              fontWeight: activeTab === type ? 700 : 400, cursor: "pointer",
+              background: activeTab === type ? "var(--color-text-primary)" : "transparent",
+              color: activeTab === type ? "white" : "var(--color-text-secondary)",
+            }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* 리스트 */}
+      <div style={{ background: "var(--color-background-primary)", borderRadius: 14, border: B, overflow: "hidden", margin: isMobile ? "0 20px" : isPC ? "0" : "0 24px", boxShadow: "var(--shadow-card)" }}>
+        {loading ? (
+          <p style={{ padding: "28px 20px", textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>불러오는 중...</p>
+        ) : items.length === 0 ? (
+          <p style={{ padding: "28px 20px", textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>데이터 없음</p>
+        ) : (
+          <>
+            {(expanded ? items : items.slice(0, 5)).map((item, i) => (
+              <div key={item.code + i} onClick={() => navigate(`/chart/${item.code}`)}
+                style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: B, cursor: "pointer", gap: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: i < 3 ? "var(--color-text-primary)" : "var(--color-text-tertiary)", minWidth: 20, textAlign: "center" }}>
+                  {item.rank}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-tertiary)" }}>{item.code}</p>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>{priceFmt(item.price)}</p>
+                  {item.change_pct && (
+                    <p style={{ margin: 0, fontSize: 11, fontWeight: 500, color: changeColor(item.change_pct) }}>{item.change_pct}%</p>
+                  )}
+                  {item.extra && (
+                    <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-tertiary)" }}>{item.extra}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+            {items.length > 5 && (
+              <button onClick={() => setExpanded((v) => !v)}
+                style={{ width: "100%", padding: "12px 0", fontSize: 13, fontWeight: 500, color: "var(--color-text-secondary)", background: "none", border: "none", cursor: "pointer", borderTop: B }}>
+                {expanded ? "▲ 접기" : `▼ 더보기 (총 ${items.length}개)`}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// 종목 추가 바텀시트 (검색 자동완성)
+function AddStockSheet({ onClose, onAdd }) {
+  const [query,    setQuery]    = useState("");
+  const [results,  setResults]  = useState([]);
+  const [selected, setSelected] = useState(null); // { code, name, market }
+  const [loading,  setLoading]  = useState(false);
+  const timerRef = useRef(null);
+
+  const handleInput = (e) => {
+    const val = e.target.value;
+    setQuery(val);
+    setSelected(null);
+    clearTimeout(timerRef.current);
+    if (!val.trim()) { setResults([]); return; }
+    timerRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const data = await searchStocks(val);
+        setResults(data);
+      } catch { setResults([]); }
+      finally { setLoading(false); }
+    }, 250);
+  };
+
+  const handleSelect = (stock) => {
+    setSelected(stock);
+    setQuery(`${stock.name} (${stock.code})`);
+    setResults([]);
+  };
+
+  const handleAdd = () => {
+    if (!selected) return;
+    onAdd(selected);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", backdropFilter: "blur(4px)" }} />
+      <div style={{
+        position: "relative", background: "var(--color-background-primary)",
+        borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480,
+        padding: "0 0 env(safe-area-inset-bottom, 0px)",
+      }}>
+        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--color-border-secondary)" }} />
+        </div>
+        <div style={{ padding: "8px 20px 24px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: "var(--color-text-primary)" }}>종목 추가</span>
+            <span onClick={onClose} style={{ fontSize: 20, color: "var(--color-text-tertiary)", cursor: "pointer" }}>×</span>
+          </div>
+
+          {/* 검색 입력 */}
+          <div style={{ position: "relative" }}>
+            <input
+              autoFocus
+              value={query}
+              onChange={handleInput}
+              placeholder="종목명 또는 코드 검색 (예: 삼성, AAPL)"
+              style={{
+                width: "100%", padding: "12px 14px", fontSize: 15,
+                border: B, borderRadius: 10, outline: "none",
+                boxSizing: "border-box",
+                background: "var(--color-background-secondary)",
+                color: "var(--color-text-primary)",
+              }}
+            />
+            {loading && (
+              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "var(--color-text-tertiary)" }}>
+                검색 중...
+              </span>
+            )}
+          </div>
+
+          {/* 검색 결과 목록 */}
+          {results.length > 0 && (
+            <div style={{ marginTop: 8, background: "var(--color-background-secondary)", borderRadius: 10, border: B, overflow: "hidden" }}>
+              {results.map((s, i) => (
+                <div key={s.code} onClick={() => handleSelect(s)}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "12px 14px", borderBottom: i < results.length - 1 ? B : "none",
+                    cursor: "pointer",
+                  }}>
+                  <div>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>{s.name}</span>
+                    <span style={{ marginLeft: 8, fontSize: 12, color: "var(--color-text-tertiary)" }}>{s.code}</span>
+                  </div>
+                  <span style={{
+                    fontSize: 10, padding: "2px 7px", borderRadius: 4, fontWeight: 600,
+                    background: s.market === "해외" ? "var(--color-background-info)" : "var(--color-background-success)",
+                    color: s.market === "해외" ? "var(--color-text-info)" : "var(--color-text-success)",
+                  }}>
+                    {s.market === "해외" ? "US" : "KR"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 선택된 종목 확인 */}
+          {selected && (
+            <div style={{ marginTop: 12, padding: "12px 14px", background: "var(--color-background-secondary)", borderRadius: 10, border: B, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>{selected.name}</span>
+                <span style={{ marginLeft: 8, fontSize: 12, color: "var(--color-text-tertiary)" }}>{selected.code}</span>
+              </div>
+              <span style={{
+                fontSize: 10, padding: "2px 7px", borderRadius: 4, fontWeight: 600,
+                background: selected.market === "해외" ? "var(--color-background-info)" : "var(--color-background-success)",
+                color: selected.market === "해외" ? "var(--color-text-info)" : "var(--color-text-success)",
+              }}>
+                {selected.market === "해외" ? "US" : "KR"}
+              </span>
+            </div>
+          )}
+
+          <button onClick={handleAdd} disabled={!selected}
+            style={{
+              width: "100%", padding: "14px 0", fontSize: 15, fontWeight: 700,
+              background: "var(--color-text-primary)", color: "white",
+              border: "none", borderRadius: 12, cursor: selected ? "pointer" : "default",
+              marginTop: 16, opacity: selected ? 1 : 0.4,
+            }}>
+            추가하기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 메인 컴포넌트 ────────────────────────────────────────────────────
 
 export default function Home() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
-  const [activeNav, setActiveNav] = useState("홈");
+  const bp = useBreakpoint();
+  const isMobile = bp === "mobile";
+  const isPC     = bp === "pc";
+  const [watchlist,   setWatchlist]   = useState([]);
+  const [stockMeta,   setStockMeta]   = useState({});
+  const [showAddSheet, setShowAddSheet] = useState(false);
+  const [loadingList,  setLoadingList]  = useState(true);
+  const [marketData,     setMarketData]     = useState(MOCK_US);
+  const [marketSettings, setMarketSettings] = useState(loadMarketSettings);
+  const [showMarketEdit, setShowMarketEdit] = useState(false);
+  const watchlistCodes = useMemo(() => watchlist.map((s) => s.code), [watchlist]);
+  const livePrices = useLivePrices(watchlistCodes);
 
-  const filtered = mockStocks.filter(
-    (s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.code.toLowerCase().includes(search.toLowerCase())
+  // 지수 + 환율 로드 → 통합 marketData
+  useEffect(() => {
+    Promise.all([
+      getIndices().catch(() => []),
+      getFX().catch(() => []),
+    ]).then(([indicesData, fxData]) => {
+      const merged = { ...MOCK_US };
+      indicesData.forEach((idx) => {
+        merged[idx.name] = { value: idx.value, change_pct: idx.change_pct };
+      });
+      fxData.forEach((item) => {
+        const currency = item.pair.split("/")[0];
+        merged[currency] = { value: item.value, unit: item.unit };
+      });
+      setMarketData(merged);
+    });
+  }, []);
+
+  // 관심종목 로드
+  useEffect(() => {
+    getWatchlist()
+      .then((stocks) => {
+        setWatchlist(stocks);
+        // 각 종목 라인 정보 병렬 로드
+        stocks.forEach((s) => loadStockMeta(s.code));
+      })
+      .catch(() => setWatchlist([]))
+      .finally(() => setLoadingList(false));
+  }, []);
+
+  const loadStockMeta = async (code) => {
+    const market = detectMarket(code);
+    const [priceData, lines] = await Promise.all([
+      getPrice(market, code).catch(() => null),
+      getLines(code).catch(() => []),
+    ]);
+
+    // 가장 가까운 선 계산
+    const price = priceData?.price ?? null;
+    let nearest = null;
+    if (price && lines.length > 0) {
+      const withDist = lines
+        .filter((l) => l.line_type === "horizontal" && l.price)
+        .map((l) => ({ ...l, dist: ((price - l.price) / l.price) * 100 }));
+      if (withDist.length > 0) {
+        const closest = withDist.reduce((a, b) => Math.abs(a.dist) < Math.abs(b.dist) ? a : b);
+        nearest = { type: closest.signal_type === "loss" ? "로스" : "공격", dist: Number(closest.dist.toFixed(2)) };
+      }
+    }
+
+    setStockMeta((prev) => ({
+      ...prev,
+      [code]: { price, lineCount: lines.length, nearest },
+    }));
+  };
+
+  const handleAddStock = async (body) => {
+    try {
+      const saved = await addStock(body);
+      setWatchlist((prev) => [...prev, saved]);
+      loadStockMeta(saved.code);
+    } catch (e) {
+      if (e?.message?.includes("409")) alert("이미 등록된 종목입니다.");
+    }
+    setShowAddSheet(false);
+  };
+
+  const handleRemoveStock = async (code, e) => {
+    e.stopPropagation();
+    await removeStock(code).catch(() => {});
+    setWatchlist((prev) => prev.filter((s) => s.code !== code));
+    setStockMeta((prev) => { const n = { ...prev }; delete n[code]; return n; });
+  };
+
+  // 관심종목 공통 렌더러
+  const WatchlistContent = ({ liveData = {} }) => (
+    <div style={{ background: "var(--color-background-primary)", borderRadius: 14, border: B, overflow: "hidden", boxShadow: "var(--shadow-card)" }}>
+      {loadingList ? (
+        <p style={{ padding: "32px 20px", textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>불러오는 중...</p>
+      ) : watchlist.length === 0 ? (
+        <div style={{ padding: "36px 20px", textAlign: "center" }}>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-tertiary)" }}>관심 종목을 추가해보세요.</p>
+          <button onClick={() => setShowAddSheet(true)}
+            style={{ marginTop: 12, padding: "9px 20px", fontSize: 13, fontWeight: 600, background: "var(--color-text-primary)", color: "white", border: "none", borderRadius: 10, cursor: "pointer" }}>
+            + 종목 추가
+          </button>
+        </div>
+      ) : (
+        watchlist.map((stock, i) => {
+          const meta    = stockMeta[stock.code];
+          const isDom   = /^\d{6}$/.test(stock.code);
+          const live    = liveData[stock.code];
+          const price   = live?.price ?? meta?.price;
+          const changePct = live?.change_pct ?? null;
+          const nearest = meta?.nearest;
+          return (
+            <div key={stock.id ?? stock.code} onClick={() => navigate(`/chart/${stock.code}`)}
+              className="row-hover"
+              style={{ display: "flex", alignItems: "center", padding: "14px 16px", gap: 12, borderBottom: i < watchlist.length - 1 ? B : "none", cursor: "pointer" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>{stock.name}</span>
+                  <span style={{ fontSize: 9, padding: "2px 5px", borderRadius: 4, fontWeight: 600, background: stock.market === "해외" ? "var(--color-background-info)" : "var(--color-background-success)", color: stock.market === "해외" ? "var(--color-text-info)" : "var(--color-text-success)" }}>
+                    {stock.market === "해외" ? "US" : "KR"}
+                  </span>
+                </div>
+                <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+                  {stock.code} · 선 {meta?.lineCount ?? 0}개
+                </span>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                {price != null ? (
+                  <>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>
+                      {isDom ? price.toLocaleString() + "원" : "$" + price.toLocaleString()}
+                    </p>
+                    {changePct && (
+                      <p style={{ margin: 0, fontSize: 11, fontWeight: 500, color: changePct.startsWith("-") ? "var(--color-text-danger)" : "var(--color-text-success)" }}>
+                        {changePct}%
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-tertiary)" }}>—</p>
+                )}
+              </div>
+              {nearest && (
+                <div style={{ textAlign: "right", minWidth: 52 }}>
+                  <p style={{ margin: "0 0 2px", fontSize: 10, color: "var(--color-text-tertiary)" }}>{nearest.type}</p>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: Math.abs(nearest.dist) < 1 ? "var(--color-text-danger)" : nearest.dist < 0 ? "var(--color-text-success)" : "var(--color-text-warning)" }}>
+                    {nearest.dist > 0 ? "+" : ""}{nearest.dist}%
+                  </span>
+                </div>
+              )}
+              <button onClick={(e) => handleRemoveStock(stock.code, e)}
+                style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "var(--color-text-tertiary)", padding: "0 2px", flexShrink: 0 }}>×</button>
+            </div>
+          );
+        })
+      )}
+    </div>
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--color-background-secondary)", display: "flex", flexDirection: "column" }}>
+    <div style={{ maxWidth: isPC ? 1200 : "100%", margin: "0 auto", paddingBottom: isMobile ? 72 : 40, padding: isPC ? "0 40px 40px" : undefined }}>
 
-      {/* ── Top Navbar (full-width, sticky) ── */}
-      <header style={{
+      {/* ── 헤더 — 모바일 전용 (PC는 TopNav) ── */}
+      <header className="glass" style={{
         position: "sticky", top: 0, zIndex: 20,
-        background: "var(--color-background-primary)",
-        borderBottom: B,
-        padding: "0 32px",
-        height: 54,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        flexShrink: 0,
+        borderBottom: B, boxShadow: "0 1px 20px rgba(80,60,160,0.06)",
+        height: 56, padding: "0 20px",
+        display: isMobile ? "flex" : "none", alignItems: "center", justifyContent: "space-between",
       }}>
-        <span style={{ fontWeight: 600, fontSize: 15, color: "var(--color-text-primary)", letterSpacing: "-0.3px" }}>MyLine</span>
-        <nav style={{ display: "flex", gap: 4 }}>
-          {NAV_ITEMS.map((item) => {
-            const active = item === activeNav;
-            return (
-              <span
-                key={item}
-                onClick={() => setActiveNav(item)}
-                style={{
-                  fontSize: 13,
-                  padding: "6px 14px",
-                  borderRadius: 6,
-                  cursor: "pointer",
-                  fontWeight: active ? 500 : 400,
-                  color: active ? "var(--color-text-info)" : "var(--color-text-secondary)",
-                  background: active ? "var(--color-background-info)" : "transparent",
-                  transition: "all 0.15s",
-                }}
-              >
-                {item}
-              </span>
-            );
-          })}
-        </nav>
-        <div style={{ width: 80 }} /> {/* spacer to balance brand */}
+        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+          <img src="/logo.png" alt="logo" style={{ width: 28, height: 28, borderRadius: 8, boxShadow: "0 2px 8px rgba(80,60,160,0.2)" }} />
+          <span style={{ fontSize: 20, fontFamily: "'Jua', sans-serif", fontWeight: 700, color: "var(--color-text-primary)" }}>오늘 날이가</span>
+        </div>
+        <button style={{ border: "none", background: "none", cursor: "pointer", padding: 4, lineHeight: 0, color: "var(--color-text-tertiary)" }}>
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+        </button>
       </header>
 
-      {/* ── Page Content ── */}
-      <main style={{ flex: 1, maxWidth: 1280, width: "100%", margin: "0 auto", padding: "28px 32px", boxSizing: "border-box" }}>
+      {/* ── 2열 그리드 (PC) / 단열 (모바일) ── */}
+      <div style={isPC ? { display: "grid", gridTemplateColumns: "1fr 380px", gap: 32, paddingTop: 28 } : {}}>
 
-        {/* Page title + search row */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: "var(--color-text-primary)", letterSpacing: "-0.4px" }}>관심 종목</h1>
-            <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--color-text-secondary)" }}>등록된 선을 기준으로 실시간 거리를 추적합니다.</p>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              type="text"
-              placeholder="종목명 또는 코드 검색..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{
-                fontSize: 13, padding: "8px 14px", border: B, borderRadius: 8,
-                background: "var(--color-background-primary)", outline: "none",
-                color: "var(--color-text-primary)", width: 220,
-              }}
-            />
-            <button style={{
-              padding: "8px 16px", fontSize: 13, fontWeight: 500,
-              background: "var(--color-text-info)", color: "white",
-              border: "none", borderRadius: 8, cursor: "pointer",
-            }}>
-              + 종목 추가
-            </button>
-          </div>
-        </div>
-
-        {/* Stats cards row */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
-          {[
-            { label: "감시 중인 종목", value: mockStocks.length, unit: "개", color: "var(--color-text-primary)" },
-            { label: "설정된 선", value: mockStocks.reduce((a, s) => a + s.lineCount, 0), unit: "개", color: "var(--color-text-primary)" },
-            { label: "오늘 알림", value: mockAlerts.filter(a => a.time.startsWith("오늘")).length, unit: "건", color: "var(--color-text-success)" },
-          ].map((card) => (
-            <div key={card.label} style={{ background: "var(--color-background-primary)", borderRadius: 12, padding: "18px 22px", border: B }}>
-              <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.4px" }}>{card.label}</p>
-              <p style={{ margin: 0, fontSize: 30, fontWeight: 600, color: card.color, letterSpacing: "-0.5px" }}>
-                {card.value}<span style={{ fontSize: 14, fontWeight: 400, marginLeft: 4 }}>{card.unit}</span>
-              </p>
+        {/* ── 왼쪽 컬럼: 시장 지수 · 환율 · 인기 종목 (+ 모바일엔 관심종목도) ── */}
+        <div>
+          {/* 마켓 (지수 + 환율 통합) */}
+          <section style={{ paddingTop: isMobile ? 20 : isPC ? 0 : 20 }}>
+            <div style={{ padding: isMobile ? "0 20px" : isPC ? "0" : "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text-primary)", letterSpacing: "-0.3px" }}>마켓</span>
+              <button onClick={() => setShowMarketEdit(true)} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, lineHeight: 0, color: "var(--color-text-tertiary)" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </button>
             </div>
-          ))}
-        </div>
-
-        {/* Main 2-col layout */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16, alignItems: "start" }}>
-
-          {/* ─ Watchlist Table ─ */}
-          <div style={{ background: "var(--color-background-primary)", borderRadius: 12, border: B, overflow: "hidden" }}>
-            {/* Table header */}
-            <div style={{
-              display: "grid", gridTemplateColumns: "1fr 130px 120px 40px",
-              padding: "10px 20px",
-              borderBottom: B,
-              background: "var(--color-background-secondary)",
-            }}>
-              {["종목", "현재가", "선까지 거리", ""].map((h) => (
-                <span key={h} style={{ fontSize: 11, fontWeight: 500, color: "var(--color-text-tertiary)", textTransform: "uppercase", letterSpacing: "0.4px" }}>{h}</span>
-              ))}
-            </div>
-
-            {/* Rows */}
-            {filtered.length === 0 ? (
-              <p style={{ padding: "40px 20px", textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>검색 결과가 없습니다.</p>
-            ) : filtered.map((stock, i) => (
-              <div
-                key={stock.id}
-                onClick={() => navigate(`/chart/${stock.code}`)}
-                style={{
-                  display: "grid", gridTemplateColumns: "1fr 130px 120px 40px",
-                  alignItems: "center",
-                  padding: "16px 20px",
-                  borderBottom: i < filtered.length - 1 ? B : "none",
-                  cursor: "pointer",
-                  transition: "background 0.1s",
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-background-secondary)"}
-                onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-              >
-                {/* 종목 */}
-                <div>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>
-                    {stock.name}
-                    <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", fontWeight: 400, marginLeft: 6 }}>{stock.code}</span>
-                    <span style={{ fontSize: 10, marginLeft: 6, padding: "2px 6px", borderRadius: 4, background: "var(--color-background-secondary)", color: "var(--color-text-tertiary)" }}>{stock.market}</span>
-                  </p>
-                  <p style={{ margin: "3px 0 0", fontSize: 12, color: "var(--color-text-tertiary)" }}>선 {stock.lineCount}개 설정됨</p>
-                </div>
-
-                {/* 현재가 */}
-                <div>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>
-                    {stock.market === "US" ? `$${stock.price}` : stock.price.toLocaleString()}
-                  </p>
-                  <p style={{ margin: "3px 0 0", fontSize: 12, fontWeight: 500, color: stock.change >= 0 ? "var(--color-text-success)" : "var(--color-text-danger)" }}>
-                    {stock.change >= 0 ? "+" : ""}{stock.change}%
-                  </p>
-                </div>
-
-                {/* 선까지 거리 */}
-                <div>
-                  <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-tertiary)" }}>{stock.distanceToBound.type}까지</p>
-                  <p style={{ margin: "3px 0 0", fontSize: 13, fontWeight: 600,
-                    color: Math.abs(stock.distanceToBound.value) < 1
-                      ? "var(--color-text-danger)"
-                      : stock.distanceToBound.value < 0
-                        ? "var(--color-text-success)"
-                        : "var(--color-text-warning)",
+            <div className="hide-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto", padding: isMobile ? "0 20px 2px" : isPC ? "0 0 2px" : "0 24px 2px" }}>
+              {MARKET_ITEMS.filter((item) => marketSettings[item.id]).map((item) => {
+                const data = marketData[item.id];
+                const changePct = data?.change_pct ? parseFloat(data.change_pct) : null;
+                const isUp = changePct !== null && changePct >= 0;
+                return (
+                  <div key={item.id} style={{
+                    flexShrink: 0, minWidth: 104,
+                    background: "var(--color-background-primary)",
+                    borderRadius: 14, padding: "13px 15px",
+                    border: B, boxShadow: "var(--shadow-card)",
                   }}>
-                    {stock.distanceToBound.value > 0 ? "+" : ""}{stock.distanceToBound.value}%
-                  </p>
-                </div>
-
-                {/* Arrow */}
-                <span style={{ fontSize: 16, color: "var(--color-text-tertiary)", textAlign: "right" }}>›</span>
-              </div>
-            ))}
-          </div>
-
-          {/* ─ Right sidebar: Alerts ─ */}
-          <div style={{ background: "var(--color-background-primary)", borderRadius: 12, border: B, overflow: "hidden" }}>
-            <div style={{ padding: "14px 18px", borderBottom: B, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>최근 알림</span>
-              <span style={{ fontSize: 12, color: "var(--color-text-info)", cursor: "pointer" }}>전체 보기</span>
-            </div>
-            {mockAlerts.map((alert, i) => (
-              <div
-                key={alert.id}
-                style={{
-                  padding: "14px 18px",
-                  borderBottom: i < mockAlerts.length - 1 ? B : "none",
-                  display: "flex", flexDirection: "column", gap: 6,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: alert.type === "loss" ? "var(--color-border-danger)" : "var(--color-border-success)", flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary)" }}>{alert.stock}</span>
+                    <p style={{ margin: 0, fontSize: 10, fontWeight: 600, color: "var(--color-text-tertiary)", letterSpacing: "0.2px" }}>
+                      {item.label}
+                      {data?.unit > 1 && <span style={{ fontSize: 9, opacity: 0.7 }}> /100</span>}
+                    </p>
+                    <p style={{ margin: "7px 0 3px", fontSize: 15, fontWeight: 700, color: "var(--color-text-primary)", letterSpacing: "-0.4px" }}>
+                      {data ? data.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) : "—"}
+                    </p>
+                    {changePct !== null
+                      ? <span style={{ fontSize: 11, fontWeight: 600, color: isUp ? "var(--color-text-success)" : "var(--color-text-danger)" }}>
+                          {isUp ? "+" : ""}{changePct.toFixed(2)}%
+                        </span>
+                      : <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>&nbsp;</span>
+                    }
                   </div>
-                  <span style={{
-                    fontSize: 10, padding: "3px 8px", borderRadius: 20, fontWeight: 500,
-                    background: alert.type === "loss" ? "var(--color-background-danger)" : "var(--color-background-success)",
-                    color: alert.type === "loss" ? "var(--color-text-danger)" : "var(--color-text-success)",
-                  }}>
-                    {alert.type === "loss" ? "로스 지점" : "공격 지점"}
-                  </span>
-                </div>
-                <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-secondary)", paddingLeft: 15 }}>
-                  {alert.msg}
-                  {alert.distance && (
-                    <span style={{ color: alert.type === "loss" ? "var(--color-text-danger)" : "var(--color-text-success)", fontWeight: 500, marginLeft: 4 }}>
-                      {alert.distance}
-                    </span>
-                  )}
+                );
+              })}
+            </div>
+          </section>
+
+          {/* 인기 종목 */}
+          <PopularSection isMobile={isMobile} isPC={isPC} navigate={navigate} />
+
+          {/* 모바일·태블릿: 관심종목 */}
+          {!isPC && (
+            <section style={{ padding: isMobile ? "20px 20px 0" : "20px 24px 0" }}>
+              <SectionTitle title="관심 종목" action="+ 추가" onAction={() => setShowAddSheet(true)} />
+              <WatchlistContent liveData={livePrices} />
+            </section>
+          )}
+        </div>
+
+        {/* ── 오른쪽 컬럼: 관심 종목 (PC 전용, sticky) ── */}
+        {isPC && (
+          <div style={{ position: "sticky", top: 76, alignSelf: "start" }}>
+            <SectionTitle title="관심 종목" action="+ 추가" onAction={() => setShowAddSheet(true)} />
+            <WatchlistContent liveData={livePrices} />
+          </div>
+        )}
+
+      </div>
+
+      {showAddSheet && (
+        <AddStockSheet onClose={() => setShowAddSheet(false)} onAdd={handleAddStock} />
+      )}
+
+      {/* 마켓 편집 시트 */}
+      {showMarketEdit && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={() => setShowMarketEdit(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", backdropFilter: "blur(4px)" }} />
+          <div style={{ position: "relative", background: "var(--color-background-primary)", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, maxHeight: "70vh", overflowY: "auto", padding: "0 0 env(safe-area-inset-bottom, 0px)" }}>
+            <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--color-border-secondary)" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 20px 12px" }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "var(--color-text-primary)" }}>마켓 표시 설정</span>
+              <span onClick={() => setShowMarketEdit(false)} style={{ fontSize: 20, color: "var(--color-text-tertiary)", cursor: "pointer" }}>×</span>
+            </div>
+            {[
+              { label: "지수", ids: ["KOSPI", "KOSDAQ", "SP500", "NASDAQ", "DOW"] },
+              { label: "환율", ids: ["USD", "JPY", "EUR", "CNY", "GBP"] },
+            ].map(({ label: groupLabel, ids }) => (
+              <div key={groupLabel}>
+                <p style={{ margin: 0, padding: "8px 20px", fontSize: 11, fontWeight: 700, color: "var(--color-text-tertiary)", background: "var(--color-background-secondary)" }}>
+                  {groupLabel}
                 </p>
-                <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-tertiary)", paddingLeft: 15 }}>{alert.time}</p>
+                {ids.map((id) => {
+                  const item = MARKET_ITEMS.find((m) => m.id === id);
+                  if (!item) return null;
+                  const on = !!marketSettings[id];
+                  return (
+                    <div key={id} onClick={() => {
+                      setMarketSettings((prev) => {
+                        const next = { ...prev, [id]: !prev[id] };
+                        saveMarketSettings(next);
+                        return next;
+                      });
+                    }} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: B, cursor: "pointer" }}>
+                      <span style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-primary)" }}>{item.label}</span>
+                      <div style={{ width: 44, height: 26, borderRadius: 13, background: on ? "#3a9e62" : "var(--color-border-secondary)", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                        <div style={{ position: "absolute", top: 3, left: on ? 21 : 3, width: 20, height: 20, borderRadius: 10, background: "white", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
-
         </div>
-      </main>
+      )}
     </div>
   );
 }

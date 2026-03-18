@@ -2,14 +2,14 @@
 키움 REST API 서비스
 - 토큰 발급 (POST /oauth2/token)
 - 국내 주식 일봉 데이터 조회 (ka10081)
+- 국내 주식 현재가 조회 (ka10001)
 """
 import httpx
 from datetime import datetime
 from app.config import settings
 from app.models.stock import StockCandle
 
-BASE_URL = "https://openapi.koreainvestment.com:9443"  # 실전
-# BASE_URL = "https://openapi.koreainvestment.com:29443"  # 모의
+BASE_URL = "https://api.kiwoom.com"
 
 _token_cache: dict = {}
 
@@ -24,92 +24,318 @@ async def get_access_token() -> str:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{BASE_URL}/oauth2/token",
+            headers={"Content-Type": "application/json;charset=UTF-8"},
             json={
                 "grant_type": "client_credentials",
                 "appkey": settings.kiwoom_app_key,
-                "appsecret": settings.kiwoom_app_secret,
+                "secretkey": settings.kiwoom_app_secret,
             },
         )
         resp.raise_for_status()
         data = resp.json()
 
-    _token_cache["token"] = data["access_token"]
-    # 만료 시간: 응답의 expires_in (초) 사용, 없으면 86400 (24h)
-    _token_cache["expires_at"] = now + data.get("expires_in", 86400)
+    _token_cache["token"] = data["token"]
+    # expires_dt 형식: "20241107083713" (YYYYMMDDHHmmss)
+    try:
+        expires_dt = datetime.strptime(data["expires_dt"], "%Y%m%d%H%M%S").timestamp()
+        _token_cache["expires_at"] = expires_dt
+    except (KeyError, ValueError):
+        _token_cache["expires_at"] = now + 86400
     return _token_cache["token"]
 
 
-async def get_daily_candles(symbol: str, count: int = 200) -> list[StockCandle]:
-    """
-    국내 주식 일봉 조회 (ka10081)
-
-    Args:
-        symbol: 종목코드 (예: "005930" 삼성전자)
-        count: 조회 봉 수 (최대 200)
-
-    Returns:
-        최신순 정렬된 StockCandle 리스트
-    """
+async def _get_chart(api_id: str, body: dict, result_key: str, count: int, date_key: str = "dt") -> list[StockCandle]:
+    """차트 공통 호출 헬퍼"""
     token = await get_access_token()
-    today = datetime.now().strftime("%Y%m%d")
-
     async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+        resp = await client.post(
+            f"{BASE_URL}/api/dostk/chart",
             headers={
                 "authorization": f"Bearer {token}",
-                "appkey": settings.kiwoom_app_key,
-                "appsecret": settings.kiwoom_app_secret,
-                "tr_id": "FHKST03010100",
-                "custtype": "P",
+                "Content-Type": "application/json;charset=UTF-8",
+                "api-id": api_id,
+                "cont-yn": "N",
+                "next-key": "",
             },
-            params={
-                "FID_COND_MRKT_DIV_CODE": "J",   # J: 코스피/코스닥
-                "FID_INPUT_ISCD": symbol,
-                "FID_INPUT_DATE_1": "19000101",
-                "FID_INPUT_DATE_2": today,
-                "FID_PERIOD_DIV_CODE": "D",       # D: 일봉
-                "FID_ORG_ADJ_PRC": "0",           # 0: 수정주가
-            },
+            json=body,
         )
         resp.raise_for_status()
         data = resp.json()
 
     candles = []
-    for item in data.get("output2", [])[:count]:
-        candles.append(
-            StockCandle(
-                date=item["stck_bsop_date"],
-                open=float(item["stck_oprc"]),
-                high=float(item["stck_hgpr"]),
-                low=float(item["stck_lwpr"]),
-                close=float(item["stck_clpr"]),
-                volume=int(item["acml_vol"]),
-            )
-        )
+    for item in data.get(result_key, [])[:count]:
+        try:
+            candles.append(StockCandle(
+                date=item[date_key],
+                open=abs(float(item["open_pric"])),
+                high=abs(float(item["high_pric"])),
+                low=abs(float(item["low_pric"])),
+                close=abs(float(item["cur_prc"])),
+                volume=int(item["trde_qty"]),
+            ))
+        except (KeyError, ValueError):
+            continue
     return candles
 
 
+async def get_daily_candles(symbol: str, count: int = 200) -> list[StockCandle]:
+    """국내 주식 일봉 조회 (ka10081)"""
+    today = datetime.now().strftime("%Y%m%d")
+    return await _get_chart(
+        "ka10081",
+        {"stk_cd": symbol, "base_dt": today, "upd_stkpc_tp": "1"},
+        "stk_dt_pole_chart_qry",
+        count,
+    )
+
+
+async def get_weekly_candles(symbol: str, count: int = 150) -> list[StockCandle]:
+    """국내 주식 주봉 조회 (ka10082)"""
+    today = datetime.now().strftime("%Y%m%d")
+    return await _get_chart(
+        "ka10082",
+        {"stk_cd": symbol, "base_dt": today, "upd_stkpc_tp": "1"},
+        "stk_stk_pole_chart_qry",
+        count,
+    )
+
+
+async def get_monthly_candles(symbol: str, count: int = 120) -> list[StockCandle]:
+    """국내 주식 월봉 조회 (ka10083)"""
+    today = datetime.now().strftime("%Y%m%d")
+    return await _get_chart(
+        "ka10083",
+        {"stk_cd": symbol, "base_dt": today, "upd_stkpc_tp": "1"},
+        "stk_mth_pole_chart_qry",
+        count,
+    )
+
+
+async def get_minute_candles(symbol: str, interval: int = 60, count: int = 300) -> list[StockCandle]:
+    """국내 주식 분봉 조회 (ka10080) — interval: 1·3·5·10·15·30·60"""
+    today = datetime.now().strftime("%Y%m%d")
+    return await _get_chart(
+        "ka10080",
+        {"stk_cd": symbol, "base_dt": today, "tic_scope": str(interval), "upd_stkpc_tp": "1"},
+        "stk_min_pole_chart_qry",
+        count,
+        date_key="cntr_tm",  # 분봉은 dt 대신 cntr_tm (YYYYMMDDHHmmss)
+    )
+
+
 async def get_current_price(symbol: str) -> float:
-    """국내 주식 현재가 조회"""
+    """국내 주식 현재가 조회 (ka10001)"""
     token = await get_access_token()
 
     async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{BASE_URL}/uapi/domestic-stock/v1/quotations/inquire-price",
+        resp = await client.post(
+            f"{BASE_URL}/api/dostk/stkinfo",
             headers={
                 "authorization": f"Bearer {token}",
-                "appkey": settings.kiwoom_app_key,
-                "appsecret": settings.kiwoom_app_secret,
-                "tr_id": "FHKST01010100",
-                "custtype": "P",
+                "Content-Type": "application/json;charset=UTF-8",
+                "api-id": "ka10001",
+                "cont-yn": "N",
+                "next-key": "",
             },
-            params={
-                "FID_COND_MRKT_DIV_CODE": "J",
-                "FID_INPUT_ISCD": symbol,
-            },
+            json={"stk_cd": symbol},
         )
         resp.raise_for_status()
         data = resp.json()
 
-    return float(data["output"]["stck_prpr"])
+    return float(data["cur_prc"])
+
+
+async def _call_ranking(endpoint: str, api_id: str, body: dict) -> dict:
+    """랭킹 TR 공통 호출"""
+    token = await get_access_token()
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{BASE_URL}{endpoint}",
+            headers={
+                "authorization": f"Bearer {token}",
+                "Content-Type": "application/json;charset=UTF-8",
+                "api-id": api_id,
+                "cont-yn": "N",
+                "next-key": "",
+            },
+            json=body,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+def _parse_price(raw: str) -> float:
+    """'+74800' / '-152000' → float"""
+    try:
+        return float(str(raw).replace("+", "").replace(",", ""))
+    except (ValueError, TypeError):
+        return 0.0
+
+
+async def get_indices() -> list[dict]:
+    """KOSPI / KOSDAQ 지수 조회 (ka20003)"""
+    results = []
+    for inds_cd, name in [("001", "KOSPI"), ("101", "KOSDAQ")]:
+        data = await _call_ranking("/api/dostk/sect", "ka20003", {"inds_cd": inds_cd})
+        items = data.get("all_inds_idex", [])
+        if items:
+            item = items[0]  # 첫 번째 = 종합지수
+            results.append({
+                "name": name,
+                "value": _parse_price(item.get("cur_prc", "0")),
+                "change_pct": item.get("flu_rt", "0.00"),
+                "pred_pre": item.get("pred_pre", "0"),
+            })
+    return results
+
+
+async def get_ranking(rank_type: str) -> list[dict]:
+    """
+    인기종목 랭킹 조회
+    type: view | volume | amount | surge | rise | fall | foreign | institution | etf
+    """
+    if rank_type == "view":
+        data = await _call_ranking("/api/dostk/stkinfo", "ka00198", {"qry_tp": "4"})
+        return [
+            {
+                "rank": i + 1,
+                "code": item["stk_cd"],
+                "name": item["stk_nm"],
+                "price": _parse_price(item.get("past_curr_prc", "0")),
+                "change_pct": item.get("base_comp_chgr", "0.00"),
+                "extra": None,
+            }
+            for i, item in enumerate(data.get("item_inq_rank", [])[:100])
+        ]
+
+    if rank_type == "volume":
+        data = await _call_ranking("/api/dostk/rkinfo", "ka10030", {
+            "mrkt_tp": "000", "sort_tp": "1", "mang_stk_incls": "1",
+            "crd_tp": "0", "trde_qty_tp": "0", "pric_tp": "0",
+            "trde_prica_tp": "0", "mrkt_open_tp": "0", "stex_tp": "3",
+        })
+        return [
+            {
+                "rank": i + 1,
+                "code": item["stk_cd"],
+                "name": item["stk_nm"],
+                "price": _parse_price(item.get("cur_prc", "0")),
+                "change_pct": item.get("flu_rt", "0.00"),
+                "extra": f'{int(item.get("trde_qty","0")):,}주',
+            }
+            for i, item in enumerate(data.get("tdy_trde_qty_upper", [])[:100])
+        ]
+
+    if rank_type == "amount":
+        data = await _call_ranking("/api/dostk/rkinfo", "ka10032", {
+            "mrkt_tp": "000", "mang_stk_incls": "1", "stex_tp": "3",
+        })
+        return [
+            {
+                "rank": item.get("now_rank", i + 1),
+                "code": item["stk_cd"],
+                "name": item["stk_nm"],
+                "price": _parse_price(item.get("cur_prc", "0")),
+                "change_pct": item.get("flu_rt", "0.00"),
+                "extra": f'{int(item.get("trde_prica","0")):,}백만',
+            }
+            for i, item in enumerate(data.get("trde_prica_upper", [])[:100])
+        ]
+
+    if rank_type == "surge":
+        data = await _call_ranking("/api/dostk/rkinfo", "ka10023", {
+            "mrkt_tp": "000", "sort_tp": "1", "tm_tp": "2",
+            "trde_qty_tp": "5", "tm": "", "stk_cnd": "0",
+            "pric_tp": "0", "stex_tp": "3",
+        })
+        return [
+            {
+                "rank": i + 1,
+                "code": item["stk_cd"],
+                "name": item["stk_nm"],
+                "price": _parse_price(item.get("cur_prc", "0")),
+                "change_pct": item.get("flu_rt", "0.00"),
+                "extra": item.get("sdnin_rt", ""),
+            }
+            for i, item in enumerate(data.get("trde_qty_sdnin", [])[:100])
+        ]
+
+    if rank_type in ("rise", "fall"):
+        sort_tp = "1" if rank_type == "rise" else "3"
+        data = await _call_ranking("/api/dostk/rkinfo", "ka10027", {
+            "mrkt_tp": "000", "sort_tp": sort_tp, "trde_qty_cnd": "0000",
+            "stk_cnd": "0", "crd_cnd": "0", "updown_incls": "1",
+            "pric_cnd": "0", "trde_prica_cnd": "0", "stex_tp": "3",
+        })
+        return [
+            {
+                "rank": i + 1,
+                "code": item["stk_cd"],
+                "name": item["stk_nm"],
+                "price": _parse_price(item.get("cur_prc", "0")),
+                "change_pct": item.get("flu_rt", "0.00"),
+                "extra": item.get("pred_pre", ""),
+            }
+            for i, item in enumerate(data.get("pred_pre_flu_rt_upper", [])[:100])
+        ]
+
+    if rank_type == "foreign":
+        data = await _call_ranking("/api/dostk/rkinfo", "ka10034", {
+            "mrkt_tp": "000", "trde_tp": "2", "dt": "0", "stex_tp": "3",
+        })
+        return [
+            {
+                "rank": item.get("rank", i + 1),
+                "code": item["stk_cd"],
+                "name": item["stk_nm"],
+                "price": _parse_price(item.get("cur_prc", "0")),
+                "change_pct": None,
+                "extra": f'순매수 {item.get("netprps_qty","0")}',
+            }
+            for i, item in enumerate(data.get("for_dt_trde_upper", [])[:100])
+        ]
+
+    if rank_type == "institution":
+        data = await _call_ranking("/api/dostk/rkinfo", "ka10065", {
+            "trde_tp": "1", "mrkt_tp": "000", "orgn_tp": "9999", "amt_qty_tp": "1",
+        })
+        return [
+            {
+                "rank": i + 1,
+                "code": item["stk_cd"],
+                "name": item["stk_nm"],
+                "price": None,
+                "change_pct": None,
+                "extra": f'순매수 {item.get("netslmt","0")}',
+            }
+            for i, item in enumerate(data.get("opmr_invsr_trde_upper", [])[:100])
+        ]
+
+    if rank_type == "etf":
+        data = await _call_ranking("/api/dostk/etf", "ka40004", {
+            "txon_type": "0", "navpre": "0", "mngmcomp": "0000",
+            "txon_yn": "0", "trace_idex": "0", "stex_tp": "1",
+        })
+        items = sorted(
+            data.get("etfall_mrpr", []),
+            key=lambda x: float(x.get("pre_rt", "0").replace("+", "") or "0"),
+            reverse=True,
+        )
+        return [
+            {
+                "rank": i + 1,
+                "code": item["stk_cd"],
+                "name": item["stk_nm"],
+                "price": _parse_price(item.get("close_pric", "0")),
+                "change_pct": item.get("pre_rt", "0.00"),
+                "extra": f'NAV {item.get("nav","")}',
+            }
+            for i, item in enumerate(items[:30])
+        ]
+
+    return []
+
+
+def invalidate_token() -> None:
+    """토큰 강제 만료 (WebSocket 인증 실패 시 호출)"""
+    _token_cache.clear()

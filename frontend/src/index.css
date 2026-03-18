@@ -5,37 +5,42 @@
 :root {
   /* === Backgrounds === */
   --color-background-primary:   #ffffff;
-  --color-background-secondary: #f7f4f0;
-  --color-background-tertiary:  #f0ede8;
+  --color-background-secondary: #f4f3f8;
+  --color-background-tertiary:  #ece9f4;
 
-  --color-background-success: #f2fdf5;
-  --color-background-danger:  #fdf2f2;
-  --color-background-warning: #fefce8;
-  --color-background-info:    #eff6ff;
+  --color-background-success: #edf8f2;
+  --color-background-danger:  #fdf0ee;
+  --color-background-warning: #fef7ee;
+  --color-background-info:    #f0f0f8;
 
   /* === Text === */
-  --color-text-primary:   #1a1a1a;
-  --color-text-secondary: #6b7280;
-  --color-text-tertiary:  #9ca3af;
+  --color-text-primary:   #1e1e38;
+  --color-text-secondary: #6a6a8a;
+  --color-text-tertiary:  #9898b8;
 
-  --color-text-success: #4d9466;
-  --color-text-danger:  #b45563;
-  --color-text-warning: #b45309;
-  --color-text-info:    #3b82f6;
+  --color-text-success: #3a9e62;
+  --color-text-danger:  #c05858;
+  --color-text-warning: #b06820;
+  --color-text-info:    #6868a8;
 
   /* === Borders === */
-  --color-border-primary:   #d1d5db;
-  --color-border-secondary: #e5e7eb;
-  --color-border-tertiary:  #e8e8e8;
+  --color-border-primary:   #c8c8e0;
+  --color-border-secondary: #d8d8ee;
+  --color-border-tertiary:  #e6e4f0;
 
-  --color-border-success: #a3d9b5;
-  --color-border-danger:  #f5c5c8;
-  --color-border-info:    #bfdbfe;
+  --color-border-success: #9ed8b8;
+  --color-border-danger:  #e8b8b8;
+  --color-border-info:    #c0c0e0;
+
+  /* === Shadows === */
+  --shadow-card:   0 2px 16px rgba(80, 60, 160, 0.07);
+  --shadow-float:  0 8px 32px rgba(80, 60, 160, 0.13);
+  --shadow-nav:    0 -1px 24px rgba(80, 60, 160, 0.08);
 
   /* === Misc === */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
-  --border-radius-lg: 12px;
-  --border-radius-md: 8px;
+  --border-radius-lg: 14px;
+  --border-radius-md: 10px;
   --border-radius-sm: 6px;
   --border-tertiary: 0.5px solid var(--color-border-tertiary);
 }
@@ -45,8 +50,48 @@
 body {
   font-family: var(--font-sans);
   color: var(--color-text-primary);
-  background: var(--color-background-tertiary);
+  background: linear-gradient(160deg, #eef8f4 0%, #f2f0f9 50%, #fdf1ef 100%) fixed;
   margin: 0;
+  min-height: 100vh;
 }
 
 input, button { font-family: var(--font-sans); }
+
+/* ── 카드 그림자 ── */
+.card {
+  box-shadow: var(--shadow-card);
+  border-radius: var(--border-radius-lg);
+}
+
+/* ── Frosted glass (헤더/nav 공통) ── */
+.glass {
+  background: rgba(255, 255, 255, 0.82) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* ── 스플래시 애니메이션 ── */
+@keyframes splashIn {
+  from { opacity: 0; transform: scale(0.88) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── 가로 스크롤 스크롤바 숨김 ── */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ── 리스트 행 hover ── */
+.row-hover {
+  transition: background 0.15s;
+}
+.row-hover:hover {
+  background: var(--color-background-secondary) !important;
+}

@@ -1,0 +1,56 @@
+const BASE = "/api";
+
+// ── 관심 종목 CRUD ──────────────────────────────
+
+export const getWatchlist = () =>
+  fetch(`${BASE}/stocks/`).then((r) => r.json());
+
+export const addStock = (body) =>
+  fetch(`${BASE}/stocks/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).then((r) => r.json());
+
+export const removeStock = (code) =>
+  fetch(`${BASE}/stocks/${code}`, { method: "DELETE" }).then((r) => r.json());
+
+// ── 종목 검색 ────────────────────────────────────
+
+export const searchStocks = (q) =>
+  fetch(`${BASE}/stocks/search?q=${encodeURIComponent(q)}`).then((r) => r.json());
+
+// ── 인기종목 랭킹 ─────────────────────────────────
+
+export const getRanking = (type = "view") =>
+  fetch(`${BASE}/stocks/ranking?type=${type}`).then((r) => r.json());
+
+// ── 시장 지수 ─────────────────────────────────────
+
+export const getIndices = () =>
+  fetch(`${BASE}/stocks/indices`).then((r) => r.json());
+
+// ── 환율 ───────────────────────────────────────────
+
+export const getFX = () =>
+  fetch(`${BASE}/stocks/fx`).then((r) => r.json());
+
+// ── 차트 데이터 ─────────────────────────────────
+
+export const getCandles = (market, symbol, timeframe = "일봉", count = 200) =>
+  fetch(`${BASE}/stocks/${market}/${symbol}/candles?timeframe=${encodeURIComponent(timeframe)}&count=${count}`).then((r) =>
+    r.json()
+  );
+
+export const getPrice = (market, symbol) =>
+  fetch(`${BASE}/stocks/${market}/${symbol}/price`).then((r) => r.json());
+
+// ── 고점 / 저점 탐지 ────────────────────────────
+
+export const getPeaks = (market, symbol, n = 10) =>
+  fetch(`${BASE}/stocks/${market}/${symbol}/peaks?n=${n}`).then((r) => r.json());
+
+// ── 유틸: 종목코드로 market 자동 판별 ────────────
+
+export const detectMarket = (code) =>
+  /^\d{6}$/.test(code) ? "KOSPI" : "US";
