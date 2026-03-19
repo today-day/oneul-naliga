@@ -34,7 +34,7 @@ const RANKING_TABS = [
   { type: "etf",         label: "ETF" },
 ];
 
-const B = "0.5px solid var(--color-border-tertiary)";
+const B = "1px solid var(--color-border-tertiary)";
 
 function ChangeText({ change, style }) {
   return (
@@ -46,10 +46,10 @@ function ChangeText({ change, style }) {
 
 function SectionTitle({ title, action, onAction }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text-primary)", letterSpacing: "-0.3px" }}>{title}</span>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+      <span style={{ fontSize: 17, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "-0.4px" }}>{title}</span>
       {action && (
-        <button onClick={onAction} style={{ border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "var(--color-text-info)", fontWeight: 500, padding: 0 }}>
+        <button onClick={onAction} style={{ border: "none", background: "var(--color-background-tertiary)", cursor: "pointer", fontSize: 12, color: "var(--color-text-secondary)", fontWeight: 600, padding: "5px 12px", borderRadius: 8 }}>
           {action}
         </button>
       )}
@@ -96,9 +96,9 @@ function PopularSection({ isMobile, isPC, navigate }) {
         {RANKING_TABS.map(({ type, label }) => (
           <button key={type} onClick={() => setActiveTab(type)}
             style={{
-              flexShrink: 0, padding: "5px 12px", fontSize: 12, borderRadius: 20, border: B,
-              fontWeight: activeTab === type ? 700 : 400, cursor: "pointer",
-              background: activeTab === type ? "var(--color-text-primary)" : "transparent",
+              flexShrink: 0, padding: "6px 14px", fontSize: 12, borderRadius: 20, border: "none",
+              fontWeight: activeTab === type ? 600 : 400, cursor: "pointer",
+              background: activeTab === type ? "var(--color-text-primary)" : "var(--color-background-tertiary)",
               color: activeTab === type ? "white" : "var(--color-text-secondary)",
             }}>
             {label}
@@ -107,7 +107,7 @@ function PopularSection({ isMobile, isPC, navigate }) {
       </div>
 
       {/* 리스트 */}
-      <div style={{ background: "var(--color-background-primary)", borderRadius: 14, border: B, overflow: "hidden", margin: isMobile ? "0 20px" : isPC ? "0" : "0 24px", boxShadow: "var(--shadow-card)" }}>
+      <div style={{ background: "var(--color-background-primary)", borderRadius: 16, overflow: "hidden", margin: isMobile ? "0 20px" : isPC ? "0" : "0 24px", boxShadow: "var(--shadow-card)" }}>
         {loading ? (
           <p style={{ padding: "28px 20px", textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>불러오는 중...</p>
         ) : items.length === 0 ? (
@@ -373,7 +373,7 @@ export default function Home() {
 
   // 관심종목 공통 렌더러
   const WatchlistContent = ({ liveData = {} }) => (
-    <div style={{ background: "var(--color-background-primary)", borderRadius: 14, border: B, overflow: "hidden", boxShadow: "var(--shadow-card)" }}>
+    <div style={{ background: "var(--color-background-primary)", borderRadius: 16, overflow: "hidden", boxShadow: "var(--shadow-card)" }}>
       {loadingList ? (
         <p style={{ padding: "32px 20px", textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>불러오는 중...</p>
       ) : watchlist.length === 0 ? (
@@ -441,59 +441,40 @@ export default function Home() {
   );
 
   return (
-    <div style={{ maxWidth: isPC ? 1200 : "100%", margin: "0 auto", paddingBottom: isMobile ? 72 : 40, padding: isPC ? "0 40px 40px" : undefined }}>
-
-      {/* ── 헤더 — 모바일 전용 (PC는 TopNav) ── */}
-      <header className="glass" style={{
-        position: "sticky", top: 0, zIndex: 20,
-        borderBottom: B, boxShadow: "0 1px 20px rgba(80,60,160,0.06)",
-        height: 56, padding: "0 20px",
-        display: isMobile ? "flex" : "none", alignItems: "center", justifyContent: "space-between",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <img src="/logo.png" alt="logo" style={{ width: 28, height: 28, borderRadius: 8, boxShadow: "0 2px 8px rgba(80,60,160,0.2)" }} />
-          <span style={{ fontSize: 20, fontFamily: "'Jua', sans-serif", fontWeight: 700, color: "var(--color-text-primary)" }}>오늘 날이가</span>
-        </div>
-        <button style={{ border: "none", background: "none", cursor: "pointer", padding: 4, lineHeight: 0, color: "var(--color-text-tertiary)" }}>
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-          </svg>
-        </button>
-      </header>
+    <div style={{ maxWidth: isPC ? 1200 : "100%", margin: "0 auto", paddingBottom: isMobile ? 88 : 40, padding: isPC ? "0 40px 40px" : undefined }}>
 
       {/* ── 2열 그리드 (PC) / 단열 (모바일) ── */}
-      <div style={isPC ? { display: "grid", gridTemplateColumns: "1fr 380px", gap: 32, paddingTop: 28 } : {}}>
+      <div style={isPC ? { display: "grid", gridTemplateColumns: "1fr 380px", gap: 32, paddingTop: 24 } : {}}>
 
         {/* ── 왼쪽 컬럼: 시장 지수 · 환율 · 인기 종목 (+ 모바일엔 관심종목도) ── */}
         <div>
           {/* 마켓 (지수 + 환율 통합) */}
-          <section style={{ paddingTop: isMobile ? 20 : isPC ? 0 : 20 }}>
-            <div style={{ padding: isMobile ? "0 20px" : isPC ? "0" : "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text-primary)", letterSpacing: "-0.3px" }}>마켓</span>
-              <button onClick={() => setShowMarketEdit(true)} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, lineHeight: 0, color: "var(--color-text-tertiary)" }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          <section style={{ paddingTop: isMobile ? 16 : isPC ? 0 : 20 }}>
+            <div style={{ padding: isMobile ? "0 20px" : isPC ? "0" : "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <span style={{ fontSize: 17, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "-0.4px" }}>마켓</span>
+              <button onClick={() => setShowMarketEdit(true)} style={{ border: "none", background: "var(--color-background-tertiary)", cursor: "pointer", padding: "5px 10px", borderRadius: 8, lineHeight: 0, color: "var(--color-text-tertiary)" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M5 12h14" />
                 </svg>
               </button>
             </div>
-            <div className="hide-scrollbar" style={{ display: "flex", gap: 10, overflowX: "auto", padding: isMobile ? "0 20px 2px" : isPC ? "0 0 2px" : "0 24px 2px" }}>
+            <div className="hide-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", padding: isMobile ? "0 20px 4px" : isPC ? "0 0 4px" : "0 24px 4px" }}>
               {MARKET_ITEMS.filter((item) => marketSettings[item.id]).map((item) => {
                 const data = marketData[item.id];
                 const changePct = data?.change_pct ? parseFloat(data.change_pct) : null;
                 const isUp = changePct !== null && changePct >= 0;
                 return (
                   <div key={item.id} style={{
-                    flexShrink: 0, minWidth: 104,
+                    flexShrink: 0, minWidth: 110,
                     background: "var(--color-background-primary)",
-                    borderRadius: 14, padding: "13px 15px",
-                    border: B, boxShadow: "var(--shadow-card)",
+                    borderRadius: 14, padding: "14px 16px",
+                    boxShadow: "var(--shadow-card)",
                   }}>
-                    <p style={{ margin: 0, fontSize: 10, fontWeight: 600, color: "var(--color-text-tertiary)", letterSpacing: "0.2px" }}>
+                    <p style={{ margin: 0, fontSize: 11, fontWeight: 500, color: "var(--color-text-tertiary)" }}>
                       {item.label}
-                      {data?.unit > 1 && <span style={{ fontSize: 9, opacity: 0.7 }}> /100</span>}
+                      {data?.unit > 1 && <span style={{ fontSize: 9, opacity: 0.6 }}> /100</span>}
                     </p>
-                    <p style={{ margin: "7px 0 3px", fontSize: 15, fontWeight: 700, color: "var(--color-text-primary)", letterSpacing: "-0.4px" }}>
+                    <p style={{ margin: "6px 0 2px", fontSize: 16, fontWeight: 700, color: "var(--color-text-primary)", letterSpacing: "-0.5px" }}>
                       {data ? data.value.toLocaleString("ko-KR", { maximumFractionDigits: 2 }) : "—"}
                     </p>
                     {changePct !== null

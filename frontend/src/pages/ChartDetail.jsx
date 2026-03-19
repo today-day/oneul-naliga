@@ -4,7 +4,7 @@ import { createChart, CrosshairMode, LineStyle } from "lightweight-charts";
 import AddLineModal from "../components/AddLineModal";
 import AutoDetectPanel from "../components/AutoDetectPanel";
 import OrderbookPanel from "../components/OrderbookPanel";
-import { getCandles, getPrice, detectMarket } from "../api/stocks";
+import { getCandles, getPrice, detectMarket, searchStocks } from "../api/stocks";
 import { useLivePrice } from "../hooks/useLivePrice";
 import { useOrderbook } from "../hooks/useOrderbook";
 import { getLines, createLine, deleteLine } from "../api/lines";
@@ -84,6 +84,7 @@ export default function ChartDetail() {
   const [mobileTab,   setMobileTab]   = useState("lines"); // "lines" | "detect" | "orderbook"
   const [showOrderbookLines, setShowOrderbookLines] = useState(true);
   const [showMinuteDropdown, setShowMinuteDropdown] = useState(false);
+  const [stockName, setStockName] = useState("");
 
   const isDomestic    = /^\d{6}$/.test(code);
   const { price: livePrice, change_pct: liveChangePct } = useLivePrice(isDomestic ? code : null);
@@ -116,6 +117,13 @@ export default function ChartDetail() {
 
     getLines(code)
       .then((data) => setLines(data))
+      .catch(() => {});
+
+    searchStocks(code)
+      .then((results) => {
+        const match = results.find((s) => s.code === code);
+        if (match) setStockName(match.name);
+      })
       .catch(() => {});
   }, [code, market]);
 
@@ -404,7 +412,8 @@ export default function ChartDetail() {
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button onClick={() => navigate("/")} style={{ border: "none", background: "none", cursor: "pointer", padding: "4px 0", fontSize: 20, color: "var(--color-text-secondary)", lineHeight: 1 }}>←</button>
           <div>
-            <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text-primary)" }}>{code}</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text-primary)" }}>{stockName || code}</span>
+            {stockName && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--color-text-tertiary)" }}>{code}</span>}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -420,7 +429,8 @@ export default function ChartDetail() {
       {/* PC 전용: 종목 정보 바 */}
       {!isMobile && (
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: "20px 32px 0", display: "flex", alignItems: "baseline", gap: 16 }}>
-          <span style={{ fontSize: 22, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "-0.5px" }}>{code}</span>
+          <span style={{ fontSize: 22, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "-0.5px" }}>{stockName || code}</span>
+          {stockName && <span style={{ fontSize: 14, color: "var(--color-text-tertiary)" }}>{code}</span>}
           <span style={{ fontSize: 24, fontWeight: 700, color: "var(--color-text-primary)" }}>
             {isDomestic ? displayPrice.toLocaleString() + "원" : "$" + displayPrice.toLocaleString()}
           </span>
@@ -517,7 +527,7 @@ export default function ChartDetail() {
                 cursor: "pointer",
               }}
             >
-              호가 S/R
+              호가 지지/저항
             </button>
           </>
         )}
