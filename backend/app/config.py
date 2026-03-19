@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
+    kakao_rest_api_key: Optional[str] = None
+    kakao_client_secret: Optional[str] = None
+
     class Config:
         env_file = ".env"
 

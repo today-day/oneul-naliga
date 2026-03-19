@@ -1,39 +1,31 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getWatchlist, removeStock } from "../api/stocks";
+import { useAuth } from "../context/AuthContext";
 
 const B = "1px solid var(--color-border-tertiary)";
 
-function Toggle({ on, onToggle }) {
+function Card({ children, style }) {
   return (
-    <div onClick={onToggle} style={{
-      width: 44, height: 26, borderRadius: 13, cursor: "pointer",
-      background: on ? "var(--color-text-success)" : "var(--color-border-primary)",
-      position: "relative", transition: "background 0.2s", flexShrink: 0,
+    <div style={{
+      background: "var(--color-background-primary)",
+      borderRadius: 14, overflow: "hidden",
+      boxShadow: "var(--shadow-card)",
+      marginBottom: 12,
+      ...style,
     }}>
-      <div style={{
-        position: "absolute", top: 3, left: on ? 21 : 3,
-        width: 20, height: 20, borderRadius: 10,
-        background: "white", transition: "left 0.2s",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-      }} />
+      {children}
     </div>
   );
 }
 
-function SectionLabel({ label }) {
-  return (
-    <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: "var(--color-text-tertiary)", letterSpacing: "0.3px" }}>
-      {label}
-    </p>
-  );
-}
-
-function Row({ label, sub, right, onClick, danger }) {
+function Row({ label, sub, right, onClick, danger, noBorder }) {
   return (
     <div onClick={onClick} style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "14px 16px", borderBottom: B, cursor: onClick ? "pointer" : "default",
+      padding: "14px 16px",
+      borderBottom: noBorder ? "none" : B,
+      cursor: onClick ? "pointer" : "default",
     }}>
       <div>
         <p style={{ margin: 0, fontSize: 14, fontWeight: 500, color: danger ? "var(--color-text-danger)" : "var(--color-text-primary)" }}>{label}</p>
@@ -44,43 +36,16 @@ function Row({ label, sub, right, onClick, danger }) {
   );
 }
 
-function Card({ children }) {
+function SectionLabel({ label }) {
   return (
-    <div style={{ background: "var(--color-background-primary)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow-card)", marginBottom: 20 }}>
-      {children}
-    </div>
+    <p style={{ margin: "20px 0 8px", fontSize: 12, fontWeight: 700, color: "var(--color-text-tertiary)", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+      {label}
+    </p>
   );
 }
 
 export default function Settings() {
-  const navigate = useNavigate();
-
-  // 다크모드
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("theme") === "dark");
-
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
-    localStorage.setItem("theme", darkMode ? "dark" : "light");
-  }, [darkMode]);
-
-  // 텔레그램 테스트
-  const [tgTesting, setTgTesting] = useState(false);
-  const [tgResult, setTgResult] = useState(null);
-
-  const testTelegram = async () => {
-    setTgTesting(true);
-    setTgResult(null);
-    try {
-      const API_URL = import.meta.env.VITE_API_URL || "";
-      const res = await fetch(`${API_URL}/api/alerts/test-telegram`, { method: "POST" });
-      const data = await res.json();
-      setTgResult(data.ok ? "ok" : "fail");
-    } catch {
-      setTgResult("fail");
-    } finally {
-      setTgTesting(false);
-    }
-  };
+  const { user, loginWithKakao, logout } = useAuth();
 
   // 관심종목
   const [watchlist, setWatchlist] = useState([]);
@@ -88,92 +53,109 @@ export default function Settings() {
 
   useEffect(() => {
     if (showWatchlist) {
-      getWatchlist().then(setWatchlist).catch(() => {});
+      getWatchlist(user?.id).then(setWatchlist).catch(() => {});
     }
-  }, [showWatchlist]);
+  }, [showWatchlist, user?.id]);
 
   const handleRemove = async (code) => {
-    await removeStock(code).catch(() => {});
+    await removeStock(code, user?.id).catch(() => {});
     setWatchlist((prev) => prev.filter((s) => s.code !== code));
   };
 
   const pad = "0 20px";
 
   return (
-    <div style={{ paddingBottom: 40, maxWidth: 480, margin: "0 auto" }}>
+    <div style={{ paddingBottom: 60, maxWidth: 480, margin: "0 auto" }}>
 
-      {/* 프로필 */}
-      <div style={{ padding: "32px 20px 24px", textAlign: "center" }}>
-        <div style={{
-          width: 72, height: 72, borderRadius: "50%", margin: "0 auto 12px",
-          background: "var(--color-background-tertiary)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 28, color: "var(--color-text-tertiary)",
-        }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-            <path d="M12 3a4 4 0 100 8 4 4 0 000-8z" />
-          </svg>
-        </div>
-        <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "var(--color-text-primary)" }}>게스트</p>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--color-text-tertiary)" }}>로그인하면 데이터가 동기화됩니다</p>
+      {/* 상단 타이틀 */}
+      <div style={{ padding: "28px 20px 12px" }}>
+        <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "-0.5px" }}>
+          마이페이지
+        </h2>
       </div>
 
+      {/* 프로필 카드 */}
+      <div style={{ padding: "0 20px 4px" }}>
+        <Card>
+          <div style={{ padding: "20px 16px", display: "flex", alignItems: "center", gap: 14 }}>
+            {/* 아바타 */}
+            <div style={{
+              width: 56, height: 56, borderRadius: "50%", flexShrink: 0,
+              background: "var(--color-background-secondary)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              overflow: "hidden",
+            }}>
+              {user?.user_metadata?.avatar_url ? (
+                <img src={user.user_metadata.avatar_url} alt="프로필" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-text-tertiary)" }}>
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                  <path d="M12 3a4 4 0 100 8 4 4 0 000-8z" />
+                </svg>
+              )}
+            </div>
+
+            {/* 이름 / 이메일 */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {user ? (user.user_metadata?.full_name || user.email || "사용자") : "게스트"}
+              </p>
+              {user && (
+                <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--color-text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {user.email || "카카오 로그인"}
+                </p>
+              )}
+            </div>
+
+            {/* 로그인/로그아웃 버튼 */}
+            {user ? (
+              <button onClick={logout} style={{
+                padding: "8px 16px", borderRadius: 10,
+                border: "1px solid var(--color-border-primary)",
+                background: "transparent", color: "var(--color-text-secondary)",
+                fontSize: 13, fontWeight: 600, cursor: "pointer", flexShrink: 0,
+              }}>
+                로그아웃
+              </button>
+            ) : (
+              <button onClick={loginWithKakao} style={{
+                padding: "8px 16px", borderRadius: 10, border: "none",
+                background: "#FEE500", color: "#191919",
+                fontSize: 13, fontWeight: 700, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+              }}>
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M9 1.5C4.86 1.5 1.5 4.186 1.5 7.5c0 2.088 1.236 3.924 3.096 5.004l-.792 2.952a.188.188 0 00.288.204l3.456-2.268C7.686 13.458 8.34 13.5 9 13.5c4.14 0 7.5-2.686 7.5-6S13.14 1.5 9 1.5z" fill="#191919"/>
+                </svg>
+                카카오 로그인
+              </button>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* 나머지 섹션 */}
       <div style={{ padding: pad }}>
-
-        {/* 알림 설정 */}
-        <SectionLabel label="알림" />
-        <Card>
-          <Row
-            label="텔레그램 알림"
-            sub="선 도달 시 알림 발송"
-            right={
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {tgResult === "ok" && <span style={{ fontSize: 11, color: "var(--color-text-success)", fontWeight: 600 }}>성공</span>}
-                {tgResult === "fail" && <span style={{ fontSize: 11, color: "var(--color-text-danger)", fontWeight: 600 }}>실패</span>}
-                <button
-                  onClick={testTelegram}
-                  disabled={tgTesting}
-                  style={{
-                    padding: "6px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8,
-                    border: "none", background: "var(--color-background-tertiary)",
-                    color: "var(--color-text-primary)", cursor: "pointer",
-                    opacity: tgTesting ? 0.5 : 1,
-                  }}
-                >
-                  {tgTesting ? "전송 중..." : "테스트"}
-                </button>
-              </div>
-            }
-          />
-        </Card>
-
-        {/* 테마 */}
-        <SectionLabel label="화면" />
-        <Card>
-          <Row
-            label="다크 모드"
-            right={<Toggle on={darkMode} onToggle={() => setDarkMode((v) => !v)} />}
-          />
-        </Card>
 
         {/* 관심종목 관리 */}
         <SectionLabel label="관심종목" />
         <Card>
           <Row
             label="관심종목 관리"
-            sub={`${watchlist.length > 0 ? watchlist.length + "개 등록됨" : "목록 보기"}`}
+            sub={watchlist.length > 0 ? `${watchlist.length}개 등록됨` : "목록 보기"}
             onClick={() => setShowWatchlist((v) => !v)}
+            noBorder={!showWatchlist || watchlist.length === 0}
             right={
-              <span style={{ fontSize: 16, color: "var(--color-text-tertiary)" }}>
+              <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
                 {showWatchlist ? "▲" : "▼"}
               </span>
             }
           />
-          {showWatchlist && watchlist.map((s) => (
+          {showWatchlist && watchlist.map((s, i) => (
             <div key={s.code} style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "10px 16px", borderBottom: B,
+              padding: "11px 16px",
+              borderBottom: i < watchlist.length - 1 ? B : "none",
               background: "var(--color-background-secondary)",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -187,19 +169,16 @@ export default function Settings() {
                   {s.market === "해외" ? "US" : "KR"}
                 </span>
               </div>
-              <button
-                onClick={() => handleRemove(s.code)}
-                style={{
-                  border: "none", background: "none", cursor: "pointer",
-                  fontSize: 12, color: "var(--color-text-danger)", fontWeight: 600, padding: "4px 8px",
-                }}
-              >
+              <button onClick={() => handleRemove(s.code)} style={{
+                border: "none", background: "none", cursor: "pointer",
+                fontSize: 12, color: "var(--color-text-danger)", fontWeight: 600, padding: "4px 8px",
+              }}>
                 삭제
               </button>
             </div>
           ))}
           {showWatchlist && watchlist.length === 0 && (
-            <p style={{ padding: "16px", textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>
+            <p style={{ padding: "16px", textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)", margin: 0 }}>
               등록된 관심종목이 없습니다
             </p>
           )}
@@ -209,16 +188,7 @@ export default function Settings() {
         <SectionLabel label="정보" />
         <Card>
           <Row label="앱 이름" right={<span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>오늘 날이가</span>} />
-          <Row label="버전" right={<span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>0.1.0</span>} />
-        </Card>
-
-        {/* 계정 */}
-        <SectionLabel label="계정" />
-        <Card>
-          <Row label="로그인 / 회원가입" onClick={() => {}} right={
-            <span style={{ fontSize: 14, color: "var(--color-text-tertiary)" }}>›</span>
-          } />
-          <Row label="로그아웃" danger onClick={() => {}} />
+          <Row label="버전" noBorder right={<span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>0.1.0</span>} />
         </Card>
 
       </div>

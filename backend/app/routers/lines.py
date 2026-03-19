@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from typing import Optional
 from app.models.line import LineCreate, LineUpdate
 from app.database import get_supabase
 
@@ -16,18 +17,19 @@ async def create_line(line: LineCreate):
 
 
 @router.get("/{stock_code}")
-async def get_lines(stock_code: str):
+async def get_lines(stock_code: str, user_id: Optional[str] = Query(default=None)):
     """특정 종목의 모든 선 조회"""
     db = get_supabase()
-    result = (
+    query = (
         db.table("lines")
         .select("*")
         .eq("stock_code", stock_code)
         .eq("is_active", True)
         .order("created_at", desc=True)
-        .execute()
     )
-    return result.data
+    if user_id:
+        query = query.eq("user_id", user_id)
+    return query.execute().data
 
 
 @router.patch("/{line_id}")

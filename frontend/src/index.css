@@ -95,51 +95,60 @@ button {
   transition: all 0.12s ease;
 }
 
+/* ── 헤더 유리 변수 (라이트/다크) ── */
+:root {
+  --header-bg: rgba(255, 255, 255, 0.72);
+  --header-border: rgba(0, 0, 0, 0.06);
+}
+
 /* ── 다크모드 ── */
 [data-theme="dark"] {
-  --color-background-primary:   #1a1a2e;
-  --color-background-secondary: #16162a;
-  --color-background-tertiary:  #222244;
+  --color-background-primary:   #1c1c1e;
+  --color-background-secondary: #2c2c2e;
+  --color-background-tertiary:  #3a3a3c;
 
-  --color-background-success: rgba(16,185,129,0.12);
-  --color-background-danger:  rgba(239,68,68,0.12);
-  --color-background-warning: rgba(245,158,11,0.12);
-  --color-background-info:    rgba(99,102,241,0.12);
+  --color-background-success: rgba(48,209,88,0.12);
+  --color-background-danger:  rgba(255,69,58,0.12);
+  --color-background-warning: rgba(255,214,10,0.12);
+  --color-background-info:    rgba(10,132,255,0.12);
 
-  --color-text-primary:   #e5e7eb;
-  --color-text-secondary: #9ca3af;
-  --color-text-tertiary:  #6b7280;
+  --color-text-primary:   #f2f2f7;
+  --color-text-secondary: #aeaeb2;
+  --color-text-tertiary:  #6b6b70;
 
-  --color-text-success: #34d399;
-  --color-text-danger:  #f87171;
-  --color-text-warning: #fbbf24;
-  --color-text-info:    #818cf8;
+  --color-text-success: #30d158;
+  --color-text-danger:  #ff453a;
+  --color-text-warning: #ffd60a;
+  --color-text-info:    #0a84ff;
 
-  --color-border-primary:   #374151;
-  --color-border-secondary: #1f2937;
-  --color-border-tertiary:  #1f2937;
+  --color-border-primary:   #38383a;
+  --color-border-secondary: #2c2c2e;
+  --color-border-tertiary:  #3a3a3c;
 
-  --color-border-success: rgba(52,211,153,0.3);
-  --color-border-danger:  rgba(248,113,113,0.3);
-  --color-border-info:    rgba(129,140,248,0.3);
+  --color-border-success: rgba(48,209,88,0.3);
+  --color-border-danger:  rgba(255,69,58,0.3);
+  --color-border-info:    rgba(10,132,255,0.3);
 
-  --shadow-card:   0 1px 3px rgba(0,0,0,0.2);
-  --shadow-card-hover: 0 4px 12px rgba(0,0,0,0.3);
-  --shadow-float:  0 8px 24px rgba(0,0,0,0.3);
-  --shadow-nav:    0 -1px 12px rgba(0,0,0,0.2);
+  --shadow-card:   0 1px 4px rgba(0,0,0,0.35);
+  --shadow-card-hover: 0 4px 16px rgba(0,0,0,0.45);
+  --shadow-float:  0 8px 28px rgba(0,0,0,0.5);
+  --shadow-nav:    0 -1px 0 rgba(255,255,255,0.06);
+
+  --header-bg: rgba(28, 28, 30, 0.88);
+  --header-border: rgba(255, 255, 255, 0.06);
 }
 
 [data-theme="dark"] body {
-  background: linear-gradient(160deg, #0f1a1f 0%, #151525 50%, #1a1020 100%) fixed;
+  background: #111111 fixed;
 }
 
 .splash-bg {
   background: linear-gradient(160deg, #eef8f4 0%, #f2f0f9 50%, #fdf1ef 100%);
 }
 [data-theme="dark"] .splash-bg {
-  background: linear-gradient(160deg, #0f1a1f 0%, #151525 50%, #1a1020 100%);
+  background: #111111;
 }
 
 [data-theme="dark"] .glass {
-  background: rgba(26, 26, 46, 0.8) !important;
+  background: rgba(28, 28, 30, 0.88) !important;
 }

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel
 import httpx
 
@@ -120,22 +120,28 @@ class StockAdd(BaseModel):
     code: str
     name: str
     market: Literal["국내", "해외"]
+    user_id: Optional[str] = None
 
 
 @router.get("/")
-async def get_watchlist():
+async def get_watchlist(user_id: Optional[str] = Query(default=None)):
     """관심 종목 목록 조회"""
     db = get_supabase()
-    result = db.table("stocks").select("*").order("created_at", desc=False).execute()
-    return result.data
+    query = db.table("stocks").select("*").order("created_at", desc=False)
+    if user_id:
+        query = query.eq("user_id", user_id)
+    return query.execute().data
 
 
 @router.post("/")
 async def add_stock(body: StockAdd):
     """관심 종목 추가"""
     db = get_supabase()
-    # 중복 방지
-    existing = db.table("stocks").select("id").eq("code", body.code).execute().data
+    # 중복 방지 (같은 유저의 동일 종목)
+    query = db.table("stocks").select("id").eq("code", body.code)
+    if body.user_id:
+        query = query.eq("user_id", body.user_id)
+    existing = query.execute().data
     if existing:
         raise HTTPException(status_code=409, detail="이미 등록된 종목입니다")
     result = db.table("stocks").insert(body.model_dump()).execute()
@@ -143,10 +149,13 @@ async def add_stock(body: StockAdd):
 
 
 @router.delete("/{code}")
-async def remove_stock(code: str):
+async def remove_stock(code: str, user_id: Optional[str] = Query(default=None)):
     """관심 종목 삭제"""
     db = get_supabase()
-    db.table("stocks").delete().eq("code", code).execute()
+    query = db.table("stocks").delete().eq("code", code)
+    if user_id:
+        query = query.eq("user_id", user_id)
+    query.execute()
     return {"deleted": code}
 
 

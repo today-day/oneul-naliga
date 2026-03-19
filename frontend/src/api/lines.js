@@ -1,8 +1,10 @@
 const API_URL = import.meta.env.VITE_API_URL || "";
 const BASE = `${API_URL}/api`;
 
-export const getLines = (stockCode) =>
-  fetch(`${BASE}/lines/${stockCode}`).then((r) => r.json());
+export const getLines = (stockCode, userId) => {
+  const params = userId ? `?user_id=${userId}` : "";
+  return fetch(`${BASE}/lines/${stockCode}${params}`).then((r) => r.json());
+};
 
 export const createLine = (body) =>
   fetch(`${BASE}/lines/`, {

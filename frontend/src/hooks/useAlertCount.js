@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
 
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 export function useAlertCount() {
+  const { user } = useAuth();
   const [count, setCount] = useState(0);
 
-  const refresh = () => {
-    fetch(`${API_URL}/api/alerts/?limit=200`)
+  const refresh = (userId) => {
+    const params = new URLSearchParams({ limit: 200 });
+    if (userId) params.set("user_id", userId);
+    fetch(`${API_URL}/api/alerts/?${params}`)
       .then((r) => r.json())
       .then((data) => {
         if (!Array.isArray(data)) return;
@@ -19,10 +23,10 @@ export function useAlertCount() {
   };
 
   useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 60000); // 1분마다 갱신
+    refresh(user?.id);
+    const interval = setInterval(() => refresh(user?.id), 60000); // 1분마다 갱신
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.id]);
 
   return count;
 }

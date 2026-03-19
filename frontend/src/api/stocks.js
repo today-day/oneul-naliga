@@ -3,8 +3,10 @@ const BASE = `${API_URL}/api`;
 
 // ── 관심 종목 CRUD ──────────────────────────────
 
-export const getWatchlist = () =>
-  fetch(`${BASE}/stocks/`).then((r) => r.json());
+export const getWatchlist = (userId) => {
+  const params = userId ? `?user_id=${userId}` : "";
+  return fetch(`${BASE}/stocks/${params}`).then((r) => r.json());
+};
 
 export const addStock = (body) =>
   fetch(`${BASE}/stocks/`, {
@@ -13,8 +15,10 @@ export const addStock = (body) =>
     body: JSON.stringify(body),
   }).then((r) => r.json());
 
-export const removeStock = (code) =>
-  fetch(`${BASE}/stocks/${code}`, { method: "DELETE" }).then((r) => r.json());
+export const removeStock = (code, userId) => {
+  const params = userId ? `?user_id=${userId}` : "";
+  return fetch(`${BASE}/stocks/${code}${params}`, { method: "DELETE" }).then((r) => r.json());
+};
 
 // ── 종목 검색 ────────────────────────────────────
 

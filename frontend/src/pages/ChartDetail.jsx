@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { createChart, CrosshairMode, LineStyle } from "lightweight-charts";
 import AddLineModal from "../components/AddLineModal";
 import AutoDetectPanel from "../components/AutoDetectPanel";
@@ -9,6 +9,7 @@ import { getCandles, getPrice, detectMarket, searchStocks } from "../api/stocks"
 import { useLivePrice } from "../hooks/useLivePrice";
 import { useOrderbook } from "../hooks/useOrderbook";
 import { getLines, createLine, deleteLine } from "../api/lines";
+import { useAuth } from "../context/AuthContext";
 
 const B = "var(--border-tertiary)";
 const TIMEFRAMES = ["일봉", "주봉", "월봉", "년봉"];
@@ -64,8 +65,10 @@ function lineColor(signalType) {
 export default function ChartDetail() {
   const { code } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobile();
   const market = detectMarket(code);
+  const { user } = useAuth();
 
   const chartRef         = useRef(null);
   const chartInstance    = useRef(null);
@@ -85,7 +88,7 @@ export default function ChartDetail() {
   const [mobileTab,   setMobileTab]   = useState("lines"); // "lines" | "detect" | "orderbook"
   const [showOrderbookLines, setShowOrderbookLines] = useState(true);
   const [showMinuteDropdown, setShowMinuteDropdown] = useState(false);
-  const [stockName, setStockName] = useState("");
+  const [stockName, setStockName] = useState(location.state?.name || "");
 
   const isDomestic    = /^\d{6}$/.test(code);
   const { price: livePrice, change_pct: liveChangePct } = useLivePrice(isDomestic ? code : null);
@@ -116,7 +119,7 @@ export default function ChartDetail() {
       .then((data) => setCurrentPrice(data.price))
       .catch(() => {});
 
-    getLines(code)
+    getLines(code, user?.id)
       .then((data) => setLines(data))
       .catch(() => {});
 
@@ -126,7 +129,7 @@ export default function ChartDetail() {
         if (match) setStockName(match.name);
       })
       .catch(() => {});
-  }, [code, market]);
+  }, [code, market, user?.id]);
 
   // ── 차트 초기화 ────────────────────────────
 
@@ -287,6 +290,7 @@ export default function ChartDetail() {
       name:        formData.name,
       sensitivity: formData.sensitivity,
       price:       formData.price ?? null,
+      user_id:     user?.id ?? null,
     };
 
     if (formData.line_type === "trend" && pendingPoints?.length === 2) {
@@ -325,6 +329,7 @@ export default function ChartDetail() {
       name: `호가 ${sr.type === "resistance" ? "저항" : "지지"} ${sr.price.toLocaleString()}`,
       price: sr.price,
       sensitivity: 0.5,
+      user_id: user?.id ?? null,
     };
     try {
       const saved = await createLine(body);
@@ -416,7 +421,9 @@ export default function ChartDetail() {
       {/* 헤더 — 모바일 전용 (PC는 TopNav 사용) */}
       <header style={{
         position: "sticky", top: 0, zIndex: 20,
-        background: "var(--color-background-primary)",
+        background: "var(--header-bg)",
+        backdropFilter: "blur(20px) saturate(180%)",
+        WebkitBackdropFilter: "blur(20px) saturate(180%)",
         borderBottom: B, height: 54,
         padding: "0 20px",
         display: isMobile ? "flex" : "none", alignItems: "center", justifyContent: "space-between",

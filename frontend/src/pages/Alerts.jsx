@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAlerts, deleteAlert } from "../api/alerts";
+import { useAuth } from "../context/AuthContext";
 
 function timeAgo(isoStr) {
   const diff = (Date.now() - new Date(isoStr)) / 1000;
@@ -17,24 +18,25 @@ function formatDate(isoStr) {
 
 export default function Alerts() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // "all" | "attack" | "loss"
 
   useEffect(() => {
-    getAlerts(null, 200)
+    getAlerts(null, 200, user?.id)
       .then((data) => setAlerts(Array.isArray(data) ? data : []))
       .catch(() => setAlerts([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [user?.id]);
 
   const handleDelete = async (id) => {
-    await deleteAlert(id).catch(() => {});
+    await deleteAlert(id, user?.id).catch(() => {});
     setAlerts((prev) => prev.filter((a) => a.id !== id));
   };
 
   const handleClearAll = async () => {
-    await Promise.all(alerts.map((a) => deleteAlert(a.id).catch(() => {})));
+    await Promise.all(alerts.map((a) => deleteAlert(a.id, user?.id).catch(() => {})));
     setAlerts([]);
   };
 

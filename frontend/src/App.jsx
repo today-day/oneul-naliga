@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import AuthCallback from "./pages/AuthCallback";
+import Login from "./pages/Login";
 import Home from "./pages/Home";
 import ChartDetail from "./pages/ChartDetail";
 import Alerts from "./pages/Alerts";
@@ -7,6 +10,7 @@ import Settings from "./pages/Settings";
 import SplashScreen from "./components/SplashScreen";
 import { useAlertCount } from "./hooks/useAlertCount";
 import SearchOverlay from "./components/SearchOverlay";
+import { useDarkMode } from "./hooks/useDarkMode";
 
 function useBreakpoint() {
   const get = () => window.innerWidth < 768 ? "mobile" : window.innerWidth < 1100 ? "tablet" : "pc";
@@ -51,6 +55,7 @@ function MobileHeader() {
   const location = useLocation();
   const alertCount = useAlertCount();
   const [showSearch, setShowSearch] = useState(false);
+  const [dark, toggleDark] = useDarkMode();
 
   if (location.pathname.startsWith("/chart/")) return null;
 
@@ -58,9 +63,10 @@ function MobileHeader() {
     <>
     <header style={{
       position: "sticky", top: 0, zIndex: 20,
-      background: "rgba(255,255,255,0.65)",
+      background: "var(--header-bg)",
       backdropFilter: "blur(20px) saturate(180%)",
       WebkitBackdropFilter: "blur(20px) saturate(180%)",
+      borderBottom: "1px solid var(--header-border)",
       height: 52, padding: "0 20px",
       display: "flex", alignItems: "center", justifyContent: "space-between",
     }}>
@@ -87,6 +93,13 @@ function MobileHeader() {
               {alertCount > 99 ? "99+" : alertCount}
             </span>
           )}
+        </button>
+        {/* 다크모드 */}
+        <button onClick={toggleDark} style={{ border: "none", background: "none", cursor: "pointer", padding: 6, lineHeight: 0, color: "var(--color-text-tertiary)" }}>
+          {dark
+            ? <Icon d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" size={20} />
+            : <Icon d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" size={20} />
+          }
         </button>
         {/* 마이페이지 */}
         <button onClick={() => navigate("/settings")} style={{ border: "none", background: "none", cursor: "pointer", padding: 6, lineHeight: 0, color: "var(--color-text-tertiary)" }}>
@@ -127,10 +140,10 @@ function BottomNav() {
   return (
     <nav style={{
       position: "fixed", bottom: 0, left: 0, right: 0,
-      background: "rgba(255,255,255,0.9)",
+      background: "var(--header-bg)",
       backdropFilter: "blur(20px) saturate(180%)",
       WebkitBackdropFilter: "blur(20px) saturate(180%)",
-      boxShadow: "0 -1px 0 rgba(0,0,0,0.04)",
+      boxShadow: "0 -1px 0 var(--header-border)",
       display: "flex",
       paddingBottom: "env(safe-area-inset-bottom, 0px)",
       zIndex: 100,
@@ -162,14 +175,16 @@ function TopNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const [showSearch, setShowSearch] = useState(false);
+  const [dark, toggleDark] = useDarkMode();
 
   return (
     <>
     <header style={{
       position: "sticky", top: 0, zIndex: 50,
-      background: "rgba(255,255,255,0.65)",
+      background: "var(--header-bg)",
       backdropFilter: "blur(20px) saturate(180%)",
       WebkitBackdropFilter: "blur(20px) saturate(180%)",
+      borderBottom: "1px solid var(--header-border)",
       height: 52,
       padding: "0 32px",
       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -184,6 +199,14 @@ function TopNav() {
         <button onClick={() => setShowSearch(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, border: "none", background: "transparent", color: "var(--color-text-tertiary)", fontSize: 13, cursor: "pointer" }}>
           <Icon d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" size={16} />
           검색
+        </button>
+
+        {/* 다크모드 */}
+        <button onClick={toggleDark} style={{ display: "flex", alignItems: "center", padding: "6px 10px", borderRadius: 8, border: "none", background: "transparent", color: "var(--color-text-tertiary)", cursor: "pointer" }}>
+          {dark
+            ? <Icon d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" size={16} />
+            : <Icon d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" size={16} />
+          }
         </button>
 
         {NAV.map((item) => {
@@ -215,16 +238,24 @@ function TopNav() {
 function AppLayout() {
   const bp = useBreakpoint();
   const isMobile = bp === "mobile";
+  const { user, loading } = useAuth();
+
+  if (loading) return <div className="splash-bg" style={{ position: "fixed", inset: 0 }} />;
+
+  // 로그인 안 된 경우 (/auth/callback 은 허용)
+  const path = window.location.pathname;
+  if (!user && path !== "/auth/callback") return <Login />;
 
   return (
     <div style={{ minHeight: "100vh" }}>
       {isMobile ? <MobileHeader /> : <TopNav />}
       <div style={{ maxWidth: isMobile ? 480 : "100%", margin: "0 auto" }}>
         <Routes>
-          <Route path="/"            element={<Home />} />
-          <Route path="/chart/:code" element={<ChartDetail />} />
-          <Route path="/alerts"      element={<Alerts />} />
-          <Route path="/settings"    element={<Settings />} />
+          <Route path="/"              element={<Home />} />
+          <Route path="/chart/:code"   element={<ChartDetail />} />
+          <Route path="/alerts"        element={<Alerts />} />
+          <Route path="/settings"      element={<Settings />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
         </Routes>
       </div>
     </div>
@@ -241,11 +272,11 @@ export default function App() {
   }, []);
 
   return (
-    <>
+    <AuthProvider>
       {!splashDone && <SplashScreen onComplete={() => setSplashDone(true)} />}
       <BrowserRouter>
         <AppLayout />
       </BrowserRouter>
-    </>
+    </AuthProvider>
   );
 }

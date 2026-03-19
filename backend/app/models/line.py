@@ -31,6 +31,7 @@ class LineCreate(BaseModel):
     price: Optional[float] = None
 
     sensitivity: float = 0.5  # 알림 민감도 (±%)
+    user_id: Optional[str] = None
 
 
 class LineUpdate(BaseModel):

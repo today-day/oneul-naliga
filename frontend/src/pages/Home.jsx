@@ -15,6 +15,7 @@ function useBreakpoint() {
 import { getWatchlist, addStock, removeStock, getPrice, detectMarket, searchStocks, getRanking, getIndices, getFX } from "../api/stocks";
 import { MARKET_ITEMS, loadMarketSettings, saveMarketSettings } from "../config/marketItems";
 import { getLines } from "../api/lines";
+import { useAuth } from "../context/AuthContext";
 
 const RANKING_TABS = [
   { type: "view",        label: "조회" },
@@ -109,7 +110,7 @@ function PopularSection({ isMobile, isPC, navigate }) {
         ) : (
           <>
             {(expanded ? items : items.slice(0, 5)).map((item, i) => (
-              <div key={item.code + i} onClick={() => navigate(`/chart/${item.code}`)}
+              <div key={item.code + i} onClick={() => navigate(`/chart/${item.code}`, { state: { name: item.name } })}
                 style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: B, cursor: "pointer", gap: 10 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: i < 3 ? "var(--color-text-primary)" : "var(--color-text-tertiary)", minWidth: 20, textAlign: "center" }}>
                   {item.rank}
@@ -281,6 +282,7 @@ export default function Home() {
   const bp = useBreakpoint();
   const isMobile = bp === "mobile";
   const isPC     = bp === "pc";
+  const { user } = useAuth();
   const [watchlist,   setWatchlist]   = useState([]);
   const [stockMeta,   setStockMeta]   = useState({});
   const [showAddSheet, setShowAddSheet] = useState(false);
@@ -311,7 +313,7 @@ export default function Home() {
 
   // 관심종목 로드
   useEffect(() => {
-    getWatchlist()
+    getWatchlist(user?.id)
       .then((stocks) => {
         setWatchlist(stocks);
         // 각 종목 라인 정보 병렬 로드
@@ -319,13 +321,13 @@ export default function Home() {
       })
       .catch(() => setWatchlist([]))
       .finally(() => setLoadingList(false));
-  }, []);
+  }, [user?.id]);
 
   const loadStockMeta = async (code) => {
     const market = detectMarket(code);
     const [priceData, lines] = await Promise.all([
       getPrice(market, code).catch(() => null),
-      getLines(code).catch(() => []),
+      getLines(code, user?.id).catch(() => []),
     ]);
 
     // 가장 가까운 선 계산
@@ -349,7 +351,7 @@ export default function Home() {
 
   const handleAddStock = async (body) => {
     try {
-      const saved = await addStock(body);
+      const saved = await addStock({ ...body, user_id: user?.id });
       setWatchlist((prev) => [...prev, saved]);
       loadStockMeta(saved.code);
     } catch (e) {
@@ -360,7 +362,7 @@ export default function Home() {
 
   const handleRemoveStock = async (code, e) => {
     e.stopPropagation();
-    await removeStock(code).catch(() => {});
+    await removeStock(code, user?.id).catch(() => {});
     setWatchlist((prev) => prev.filter((s) => s.code !== code));
     setStockMeta((prev) => { const n = { ...prev }; delete n[code]; return n; });
   };
@@ -387,7 +389,7 @@ export default function Home() {
           const changePct = live?.change_pct ?? null;
           const nearest = meta?.nearest;
           return (
-            <div key={stock.id ?? stock.code} onClick={() => navigate(`/chart/${stock.code}`)}
+            <div key={stock.id ?? stock.code} onClick={() => navigate(`/chart/${stock.code}`, { state: { name: stock.name } })}
               className="row-hover"
               style={{ display: "flex", alignItems: "center", padding: "14px 16px", gap: 12, borderBottom: i < watchlist.length - 1 ? B : "none", cursor: "pointer" }}>
               <div style={{ flex: 1, minWidth: 0 }}>

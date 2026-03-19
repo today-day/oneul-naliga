@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getOrderbook } from "../api/stocks";
 import { useOrderbook } from "../hooks/useOrderbook";
 
@@ -31,7 +31,26 @@ export default function OrderbookPanel({ market, code, onSaveSupportResistance }
   const bids = live.bids.length > 0 ? live.bids : initialData?.bids || [];
   const totalAskQty = live.total_ask_qty || initialData?.total_ask_qty || 0;
   const totalBidQty = live.total_bid_qty || initialData?.total_bid_qty || 0;
-  const supportResistance = live.supportResistance || [];
+
+  // SR: WebSocket 실시간 우선, 없으면 REST 데이터로 계산
+  const restSR = useMemo(() => {
+    const restAsks = initialData?.asks || [];
+    const restBids = initialData?.bids || [];
+    const all = [...restAsks, ...restBids];
+    if (all.length === 0) return [];
+    const avg = all.reduce((s, e) => s + e.quantity, 0) / all.length;
+    const threshold = avg * 3;
+    return all
+      .filter((e) => e.quantity >= threshold && e.price > 0)
+      .map((e) => ({
+        price: e.price,
+        quantity: e.quantity,
+        type: restAsks.some((a) => a.price === e.price) ? "resistance" : "support",
+        ratio: (e.quantity / avg).toFixed(1),
+      }));
+  }, [initialData]);
+
+  const supportResistance = live.supportResistance?.length > 0 ? live.supportResistance : restSR;
 
   if (!isDomestic) {
     return (
