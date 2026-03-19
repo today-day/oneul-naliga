@@ -1,11 +1,20 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Literal, Optional
+
+VALID_TIMEFRAMES = {"일봉", "주봉", "월봉", "년봉", "1분", "3분", "5분", "10분", "15분", "30분", "60분"}
 
 
 class LineCreate(BaseModel):
     """선 생성 요청 모델"""
     stock_code: str
-    timeframe: Literal["일봉", "주봉", "월봉", "60분", "30분"]
+    timeframe: str
+
+    @field_validator("timeframe")
+    @classmethod
+    def check_timeframe(cls, v):
+        if v not in VALID_TIMEFRAMES:
+            raise ValueError(f"지원하지 않는 timeframe: {v}")
+        return v
     line_type: Literal["trend", "horizontal"]
     signal_type: Literal["attack", "loss"]
     name: Optional[str] = None

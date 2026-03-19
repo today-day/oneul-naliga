@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 const B = "var(--border-tertiary)";
-const TIMEFRAMES = ["일봉", "주봉", "월봉", "60분", "30분"];
+const TIMEFRAMES = ["일봉", "주봉", "월봉", "년봉", "1분", "3분", "5분", "10분", "15분", "30분", "60분"];
 const SENSITIVITY_LABELS = ["±0.3%", "±0.5%", "±0.7%", "±1.0%", "±1.5%"];
 const SENSITIVITY_VALUES = [0.3, 0.5, 0.7, 1.0, 1.5];
 

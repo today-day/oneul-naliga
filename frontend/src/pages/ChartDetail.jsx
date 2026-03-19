@@ -3,12 +3,15 @@ import { useNavigate, useParams } from "react-router-dom";
 import { createChart, CrosshairMode, LineStyle } from "lightweight-charts";
 import AddLineModal from "../components/AddLineModal";
 import AutoDetectPanel from "../components/AutoDetectPanel";
+import OrderbookPanel from "../components/OrderbookPanel";
 import { getCandles, getPrice, detectMarket } from "../api/stocks";
 import { useLivePrice } from "../hooks/useLivePrice";
+import { useOrderbook } from "../hooks/useOrderbook";
 import { getLines, createLine, deleteLine } from "../api/lines";
 
 const B = "var(--border-tertiary)";
-const TIMEFRAMES = ["일봉", "주봉", "월봉", "60분", "30분"];
+const TIMEFRAMES = ["일봉", "주봉", "월봉", "년봉"];
+const MINUTE_OPTIONS = [1, 3, 5, 10, 15, 30, 60];
 const MA_CONFIG = [
   { key: "ma5",  period: 5,  color: "#f59e0b", label: "MA5" },
   { key: "ma20", period: 20, color: "#8b5cf6", label: "MA20" },
@@ -78,14 +81,20 @@ export default function ChartDetail() {
   const [drawPoints,  setDrawPoints]  = useState([]);
   const [showModal,   setShowModal]   = useState(false);
   const [pendingPoints, setPendingPoints] = useState(null);
-  const [mobileTab,   setMobileTab]   = useState("lines"); // "lines" | "detect"
+  const [mobileTab,   setMobileTab]   = useState("lines"); // "lines" | "detect" | "orderbook"
+  const [showOrderbookLines, setShowOrderbookLines] = useState(true);
+  const [showMinuteDropdown, setShowMinuteDropdown] = useState(false);
+
+  const isDomestic    = /^\d{6}$/.test(code);
+  const { price: livePrice, change_pct: liveChangePct } = useLivePrice(isDomestic ? code : null);
+  const { supportResistance: obSR } = useOrderbook(isDomestic ? code : null);
 
   // ── 데이터 로드 ────────────────────────────
 
-  const isIntraday = timeframe === "30분" || timeframe === "60분";
+  const isIntraday = timeframe.endsWith("분");
 
   useEffect(() => {
-    const count = timeframe === "월봉" ? 120 : timeframe === "주봉" ? 150 : 300;
+    const count = timeframe === "년봉" ? 30 : timeframe === "월봉" ? 120 : timeframe === "주봉" ? 150 : 300;
     getCandles(market, code, timeframe, count)
       .then((data) => {
         const chartData = (data.candles ?? []).reverse().map((c) => ({
@@ -191,6 +200,35 @@ export default function ChartDetail() {
     });
   }, [lines, candles]);
 
+  // ── 호가 기반 지지/저항선 차트 표시 ─────────
+
+  const obPriceLinesRef = useRef([]);
+
+  useEffect(() => {
+    if (!candleSeries.current) return;
+    const cs = candleSeries.current;
+
+    // 이전 호가 기반 선 제거
+    obPriceLinesRef.current.forEach((pl) => {
+      try { cs.removePriceLine(pl); } catch {}
+    });
+    obPriceLinesRef.current = [];
+
+    if (!showOrderbookLines || !obSR || obSR.length === 0) return;
+
+    obSR.forEach((sr) => {
+      const pl = cs.createPriceLine({
+        price: sr.price,
+        color: sr.type === "resistance" ? "rgba(91, 141, 239, 0.6)" : "rgba(239, 91, 91, 0.6)",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: `${sr.type === "resistance" ? "저항" : "지지"} ${sr.ratio}x`,
+      });
+      obPriceLinesRef.current.push(pl);
+    });
+  }, [obSR, showOrderbookLines]);
+
   // ── 차트 클릭 (PC 선 긋기) ─────────────────
 
   useEffect(() => {
@@ -257,6 +295,25 @@ export default function ChartDetail() {
     setLines((prev) => prev.filter((l) => l.id !== id));
   };
 
+  // 호가 기반 지지/저항선 → 내 선으로 저장
+  const handleSaveOrderbookSR = useCallback(async (sr) => {
+    const body = {
+      stock_code: code,
+      timeframe: "일봉",
+      line_type: "horizontal",
+      signal_type: sr.type === "resistance" ? "attack" : "loss",
+      name: `호가 ${sr.type === "resistance" ? "저항" : "지지"} ${sr.price.toLocaleString()}`,
+      price: sr.price,
+      sensitivity: 0.5,
+    };
+    try {
+      const saved = await createLine(body);
+      setLines((prev) => [...prev, saved]);
+    } catch {
+      setLines((prev) => [...prev, { ...body, id: Date.now() }]);
+    }
+  }, [code]);
+
   // AutoDetectPanel → 두 점 선택 완료
   const handleDetectPoints = (points) => {
     setPendingPoints(points);
@@ -264,9 +321,6 @@ export default function ChartDetail() {
   };
 
   // ── 가격 표시 ──────────────────────────────
-
-  const isDomestic    = /^\d{6}$/.test(code);
-  const { price: livePrice, change_pct: liveChangePct } = useLivePrice(isDomestic ? code : null);
 
   const lastClose  = candles.at(-1)?.close;
   const prevClose  = candles.at(-2)?.close;
@@ -377,11 +431,11 @@ export default function ChartDetail() {
       )}
 
       {/* 봉 종류 + MA 탭 */}
-      <div className="hide-scrollbar" style={{ display: "flex", gap: 8, padding: isMobile ? "12px 20px" : "12px 32px", overflowX: "auto", background: "var(--color-background-primary)", borderBottom: B, maxWidth: isMobile ? "100%" : 1400, margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
+      <div className="hide-scrollbar" style={{ display: "flex", gap: 8, padding: isMobile ? "12px 20px" : "12px 32px", overflowX: "auto", overflow: showMinuteDropdown ? "visible" : undefined, background: "var(--color-background-primary)", borderBottom: B, maxWidth: isMobile ? "100%" : 1400, margin: "0 auto", width: "100%", boxSizing: "border-box", position: "relative", zIndex: 15 }}>
         {TIMEFRAMES.map((tf) => (
           <button
             key={tf}
-            onClick={() => setTimeframe(tf)}
+            onClick={() => { setTimeframe(tf); setShowMinuteDropdown(false); }}
             style={{
               flexShrink: 0, padding: "6px 14px", fontSize: 13, borderRadius: 20, border: B,
               fontWeight: timeframe === tf ? 600 : 400,
@@ -393,6 +447,47 @@ export default function ChartDetail() {
             {tf}
           </button>
         ))}
+        {/* 분봉 드롭다운 */}
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <button
+            onClick={() => setShowMinuteDropdown((v) => !v)}
+            style={{
+              padding: "6px 14px", fontSize: 13, borderRadius: 20, border: B,
+              fontWeight: isIntraday ? 600 : 400,
+              background: isIntraday ? "var(--color-text-primary)" : "transparent",
+              color: isIntraday ? "white" : "var(--color-text-secondary)",
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+            }}
+          >
+            {isIntraday ? timeframe : "분봉"}
+            <span style={{ fontSize: 10, lineHeight: 1 }}>▾</span>
+          </button>
+          {showMinuteDropdown && (
+            <div style={{
+              position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 50,
+              background: "var(--color-background-primary)", border: B,
+              borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+              overflow: "hidden", minWidth: 80,
+            }}>
+              {MINUTE_OPTIONS.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => { setTimeframe(`${m}분`); setShowMinuteDropdown(false); }}
+                  style={{
+                    display: "block", width: "100%", padding: "8px 14px", fontSize: 13,
+                    border: "none", borderBottom: `1px solid var(--color-background-secondary)`,
+                    background: timeframe === `${m}분` ? "var(--color-background-secondary)" : "transparent",
+                    color: timeframe === `${m}분` ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                    fontWeight: timeframe === `${m}분` ? 600 : 400,
+                    cursor: "pointer", textAlign: "left",
+                  }}
+                >
+                  {m}분
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div style={{ width: 1, background: B, flexShrink: 0, margin: "2px 4px" }} />
         {MA_CONFIG.map(({ key, label, color }) => (
           <button
@@ -409,6 +504,23 @@ export default function ChartDetail() {
             {label}
           </button>
         ))}
+        {isDomestic && (
+          <>
+            <div style={{ width: 1, background: B, flexShrink: 0, margin: "2px 4px" }} />
+            <button
+              onClick={() => setShowOrderbookLines((prev) => !prev)}
+              style={{
+                flexShrink: 0, padding: "6px 12px", fontSize: 12, borderRadius: 20, border: B,
+                fontWeight: showOrderbookLines ? 600 : 400,
+                background: showOrderbookLines ? "rgba(91, 141, 239, 0.15)" : "transparent",
+                color: showOrderbookLines ? "#5b8def" : "var(--color-text-tertiary)",
+                cursor: "pointer",
+              }}
+            >
+              호가 S/R
+            </button>
+          </>
+        )}
       </div>
 
       {/* PC: 2열 레이아웃 */}
@@ -428,12 +540,29 @@ export default function ChartDetail() {
             <div ref={chartRef} style={{ width: "100%", cursor: drawMode ? "crosshair" : "default" }} />
           </div>
 
-          {/* 사이드바 */}
-          <div style={{ background: "var(--color-background-primary)", borderRadius: 12, border: B, overflow: "hidden" }}>
-            <div style={{ padding: "12px 20px", borderBottom: B }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>내 선 ({lines.length})</span>
+          {/* 사이드바: 탭 전환 (내 선 / 호가) */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            {/* 내 선 */}
+            <div style={{ background: "var(--color-background-primary)", borderRadius: 12, border: B, overflow: "hidden" }}>
+              <div style={{ padding: "12px 20px", borderBottom: B }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>내 선 ({lines.length})</span>
+              </div>
+              {renderLineList()}
             </div>
-            {renderLineList()}
+
+            {/* 호가 (국내 종목만) */}
+            {isDomestic && (
+              <div style={{ background: "var(--color-background-primary)", borderRadius: 12, border: B, overflow: "hidden" }}>
+                <div style={{ padding: "12px 20px", borderBottom: B }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>호가</span>
+                </div>
+                <OrderbookPanel
+                  market={market}
+                  code={code}
+                  onSaveSupportResistance={handleSaveOrderbookSR}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -449,8 +578,9 @@ export default function ChartDetail() {
           {/* 모바일 패널 탭 */}
           <div style={{ background: "var(--color-background-primary)", borderBottom: B, display: "flex" }}>
             {[
-              { key: "lines",  label: `선 목록 (${lines.length})` },
-              { key: "detect", label: "고점 탐지" },
+              { key: "lines",     label: `선 목록 (${lines.length})` },
+              { key: "orderbook", label: "호가" },
+              { key: "detect",    label: "고점 탐지" },
             ].map(({ key, label }) => (
               <button
                 key={key}
@@ -471,6 +601,13 @@ export default function ChartDetail() {
           {/* 패널 내용 */}
           <div style={{ background: "var(--color-background-primary)" }}>
             {mobileTab === "lines" && renderLineList()}
+            {mobileTab === "orderbook" && (
+              <OrderbookPanel
+                market={market}
+                code={code}
+                onSaveSupportResistance={handleSaveOrderbookSR}
+              />
+            )}
             {mobileTab === "detect" && (
               <AutoDetectPanel
                 market={market}

@@ -142,8 +142,12 @@ async def get_candles(
                 candles = await kiwoom.get_weekly_candles(symbol, count)
             elif timeframe == "월봉":
                 candles = await kiwoom.get_monthly_candles(symbol, count)
-            elif timeframe in ("30분", "60분"):
+            elif timeframe == "년봉":
+                candles = await kiwoom.get_yearly_candles(symbol, count)
+            elif timeframe.endswith("분"):
                 interval = int(timeframe.replace("분", ""))
+                if interval not in (1, 3, 5, 10, 15, 30, 60):
+                    raise HTTPException(status_code=400, detail=f"지원하지 않는 분봉: {timeframe}")
                 candles = await kiwoom.get_minute_candles(symbol, interval, count)
             else:  # 일봉 기본
                 candles = await kiwoom.get_daily_candles(symbol, count)
@@ -167,6 +171,24 @@ async def get_price(
         else:
             price = await kis.get_current_price(symbol, exchange)
         return {"symbol": symbol, "price": price}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+# ─────────────────────────────────────────
+# 호가 조회
+# ─────────────────────────────────────────
+
+@router.get("/{market}/{symbol}/orderbook")
+async def get_orderbook(
+    market: Literal["KOSPI", "KOSDAQ", "US"],
+    symbol: str,
+):
+    """주식 호가 조회 (매도/매수 각 10호가)"""
+    if market == "US":
+        raise HTTPException(status_code=400, detail="해외 종목은 호가를 지원하지 않습니다")
+    try:
+        return await kiwoom.get_orderbook(symbol)
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 

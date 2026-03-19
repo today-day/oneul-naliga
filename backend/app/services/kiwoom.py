@@ -123,6 +123,17 @@ async def get_minute_candles(symbol: str, interval: int = 60, count: int = 300) 
     )
 
 
+async def get_yearly_candles(symbol: str, count: int = 30) -> list[StockCandle]:
+    """국내 주식 년봉 조회 (ka10094)"""
+    today = datetime.now().strftime("%Y%m%d")
+    return await _get_chart(
+        "ka10094",
+        {"stk_cd": symbol, "base_dt": today, "upd_stkpc_tp": "1"},
+        "stk_yr_pole_chart_qry",
+        count,
+    )
+
+
 async def get_current_price(symbol: str) -> float:
     """국내 주식 현재가 조회 (ka10001)"""
     token = await get_access_token()
@@ -334,6 +345,89 @@ async def get_ranking(rank_type: str) -> list[dict]:
         ]
 
     return []
+
+
+async def get_orderbook(symbol: str) -> dict:
+    """
+    국내 주식 호가 조회 (ka10004)
+    매도/매수 각 10호가 + 잔량 반환
+
+    응답 필드명:
+      매도 1차: sel_fpr_bid(호가), sel_fpr_req(잔량)
+      매도 N차: sel_Nth_pre_bid(호가), sel_Nth_pre_req(잔량)  (N=2~10)
+      매수 1차: buy_fpr_bid(호가), buy_fpr_req(잔량)
+      매수 N차: buy_Nth_pre_bid(호가), buy_Nth_pre_req(잔량)  (N=2~10)
+      총잔량:   tot_sel_req, tot_buy_req
+    """
+    token = await get_access_token()
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{BASE_URL}/api/dostk/mrkcond",
+            headers={
+                "authorization": f"Bearer {token}",
+                "Content-Type": "application/json;charset=UTF-8",
+                "api-id": "ka10004",
+                "cont-yn": "N",
+                "next-key": "",
+            },
+            json={"stk_cd": symbol},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    # 매도호가 키 매핑 (10차→1차, 높은 가격부터)
+    _SEL_KEYS = [
+        ("sel_10th_pre_bid", "sel_10th_pre_req"),
+        ("sel_9th_pre_bid",  "sel_9th_pre_req"),
+        ("sel_8th_pre_bid",  "sel_8th_pre_req"),
+        ("sel_7th_pre_bid",  "sel_7th_pre_req"),
+        ("sel_6th_pre_bid",  "sel_6th_pre_req"),
+        ("sel_5th_pre_bid",  "sel_5th_pre_req"),
+        ("sel_4th_pre_bid",  "sel_4th_pre_req"),
+        ("sel_3th_pre_bid",  "sel_3th_pre_req"),
+        ("sel_2th_pre_bid",  "sel_2th_pre_req"),
+        ("sel_fpr_bid",      "sel_fpr_req"),
+    ]
+
+    # 매수호가 키 매핑 (1차→10차, 높은 가격부터)
+    _BUY_KEYS = [
+        ("buy_fpr_bid",      "buy_fpr_req"),
+        ("buy_2th_pre_bid",  "buy_2th_pre_req"),
+        ("buy_3th_pre_bid",  "buy_3th_pre_req"),
+        ("buy_4th_pre_bid",  "buy_4th_pre_req"),
+        ("buy_5th_pre_bid",  "buy_5th_pre_req"),
+        ("buy_6th_pre_bid",  "buy_6th_pre_req"),
+        ("buy_7th_pre_bid",  "buy_7th_pre_req"),
+        ("buy_8th_pre_bid",  "buy_8th_pre_req"),
+        ("buy_9th_pre_bid",  "buy_9th_pre_req"),
+        ("buy_10th_pre_bid", "buy_10th_pre_req"),
+    ]
+
+    asks = []  # 매도호가 (높→낮)
+    for price_key, qty_key in _SEL_KEYS:
+        price = abs(_parse_price(data.get(price_key, "0")))
+        qty = int(data.get(qty_key, "0"))
+        if price > 0:
+            asks.append({"price": price, "quantity": qty})
+
+    bids = []  # 매수호가 (높→낮)
+    for price_key, qty_key in _BUY_KEYS:
+        price = abs(_parse_price(data.get(price_key, "0")))
+        qty = int(data.get(qty_key, "0"))
+        if price > 0:
+            bids.append({"price": price, "quantity": qty})
+
+    total_ask_qty = int(data.get("tot_sel_req", "0"))
+    total_bid_qty = int(data.get("tot_buy_req", "0"))
+
+    return {
+        "symbol": symbol,
+        "asks": asks,
+        "bids": bids,
+        "total_ask_qty": total_ask_qty,
+        "total_bid_qty": total_bid_qty,
+    }
 
 
 def invalidate_token() -> None:

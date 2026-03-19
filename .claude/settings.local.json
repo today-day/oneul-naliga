@@ -6,7 +6,11 @@
       "Bash(source /c/Users/choiy/Desktop/oneul-naliga/backend/.venv/Scripts/activate)",
       "Bash(uv add:*)",
       "Bash(npm run:*)",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(npx vite:*)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/app/services/kiwoom.py''\\).read\\(\\)\\); ast.parse\\(open\\(''backend/app/services/kiwoom_ws.py''\\).read\\(\\)\\); ast.parse\\(open\\(''backend/app/main.py''\\).read\\(\\)\\); ast.parse\\(open\\(''backend/app/routers/stocks.py''\\).read\\(\\)\\); print\\(''All Python files OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/app/services/kiwoom.py'', encoding=''utf-8''\\).read\\(\\)\\); ast.parse\\(open\\(''backend/app/services/kiwoom_ws.py'', encoding=''utf-8''\\).read\\(\\)\\); ast.parse\\(open\\(''backend/app/main.py'', encoding=''utf-8''\\).read\\(\\)\\); ast.parse\\(open\\(''backend/app/routers/stocks.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''All Python files OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/app/services/kiwoom.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''OK''\\)\")"
     ]
   }
 }

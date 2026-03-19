@@ -1,4 +1,5 @@
-const BASE = "/api";
+const API_URL = import.meta.env.VITE_API_URL || "";
+const BASE = `${API_URL}/api`;
 
 // ── 관심 종목 CRUD ──────────────────────────────
 
@@ -44,6 +45,11 @@ export const getCandles = (market, symbol, timeframe = "일봉", count = 200) =>
 
 export const getPrice = (market, symbol) =>
   fetch(`${BASE}/stocks/${market}/${symbol}/price`).then((r) => r.json());
+
+// ── 호가 조회 ─────────────────────────────────────
+
+export const getOrderbook = (market, symbol) =>
+  fetch(`${BASE}/stocks/${market}/${symbol}/orderbook`).then((r) => r.json());
 
 // ── 고점 / 저점 탐지 ────────────────────────────
 

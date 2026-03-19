@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
-const WS_BASE = "ws://localhost:8000/ws/prices";
+const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
+const WS_BASE = `${WS_URL}/ws/prices`;
 
 /**
  * 실시간 가격 훅

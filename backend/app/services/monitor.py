@@ -2,7 +2,7 @@
 24시간 가격 감시 서비스
 
 ① realtime_monitor  — 분봉 선: 키움 WebSocket 푸시 수신 → 즉시 감지
-② daily_monitor     — 일봉/주봉/월봉 선: 장 마감 후(15:30 KST) REST 1회
+② daily_monitor     — 일봉/주봉/월봉/년봉 선: 장 마감 후(15:30 KST) REST 1회
 
 REST API 폴링 절대 사용 금지 (키움 속도 제한 초과)
 """
@@ -18,8 +18,8 @@ from app.services.kiwoom_ws import stream_prices
 
 KST = pytz.timezone("Asia/Seoul")
 
-REALTIME_TIMEFRAMES = {"분봉", "60분", "30분"}
-DAILY_TIMEFRAMES    = {"일봉", "주봉", "월봉"}
+REALTIME_TIMEFRAMES = {"1분", "3분", "5분", "10분", "15분", "30분", "60분"}
+DAILY_TIMEFRAMES    = {"일봉", "주봉", "월봉", "년봉"}
 
 
 # ─────────────────────────────────────────
