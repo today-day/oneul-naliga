@@ -4,6 +4,7 @@ import { createChart, CrosshairMode, LineStyle } from "lightweight-charts";
 import AddLineModal from "../components/AddLineModal";
 import AutoDetectPanel from "../components/AutoDetectPanel";
 import OrderbookPanel from "../components/OrderbookPanel";
+import InvestorPanel from "../components/InvestorPanel";
 import { getCandles, getPrice, detectMarket, searchStocks } from "../api/stocks";
 import { useLivePrice } from "../hooks/useLivePrice";
 import { useOrderbook } from "../hooks/useOrderbook";
@@ -21,7 +22,7 @@ const MA_CONFIG = [
 // ── 유틸 ──────────────────────────────────────
 
 function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1100);
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth < 1100);
     window.addEventListener("resize", h);
@@ -138,6 +139,8 @@ export default function ChartDetail() {
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor: "#2a2a4a" },
       timeScale: { borderColor: "#2a2a4a", timeVisible: true, secondsVisible: false },
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+      handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true, axisDoubleClickReset: true },
       width:  chartRef.current.clientWidth,
       height: isMobile ? 300 : 520,
     });
@@ -441,7 +444,7 @@ export default function ChartDetail() {
       )}
 
       {/* 봉 종류 + MA 탭 */}
-      <div className="hide-scrollbar" style={{ display: "flex", gap: 8, padding: isMobile ? "12px 20px" : "12px 32px", overflowX: "auto", overflow: showMinuteDropdown ? "visible" : undefined, background: "var(--color-background-primary)", borderBottom: B, maxWidth: isMobile ? "100%" : 1400, margin: "0 auto", width: "100%", boxSizing: "border-box", position: "relative", zIndex: 15 }}>
+      <div className="hide-scrollbar" style={{ display: "flex", gap: 8, padding: isMobile ? "12px 20px" : "12px 32px", overflowX: showMinuteDropdown ? "visible" : "auto", overflowY: showMinuteDropdown ? "visible" : "hidden", background: "var(--color-background-primary)", borderBottom: B, maxWidth: isMobile ? "100%" : 1400, margin: "0 auto", width: "100%", boxSizing: "border-box", position: "relative", zIndex: 15 }}>
         {TIMEFRAMES.map((tf) => (
           <button
             key={tf}
@@ -573,6 +576,16 @@ export default function ChartDetail() {
                 />
               </div>
             )}
+
+            {/* 투자자별 매매동향 (국내 종목만) */}
+            {isDomestic && (
+              <div style={{ background: "var(--color-background-primary)", borderRadius: 12, border: B, overflow: "hidden" }}>
+                <div style={{ padding: "12px 20px", borderBottom: B }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>투자자</span>
+                </div>
+                <InvestorPanel market={market} code={code} />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -590,6 +603,7 @@ export default function ChartDetail() {
             {[
               { key: "lines",     label: `선 목록 (${lines.length})` },
               { key: "orderbook", label: "호가" },
+              { key: "investor",  label: "투자자" },
               { key: "detect",    label: "고점 탐지" },
             ].map(({ key, label }) => (
               <button
@@ -617,6 +631,9 @@ export default function ChartDetail() {
                 code={code}
                 onSaveSupportResistance={handleSaveOrderbookSR}
               />
+            )}
+            {mobileTab === "investor" && (
+              <InvestorPanel market={market} code={code} />
             )}
             {mobileTab === "detect" && (
               <AutoDetectPanel

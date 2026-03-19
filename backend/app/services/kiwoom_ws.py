@@ -28,7 +28,7 @@ RECONNECT_MAX  = 60
 
 def _parse_price(raw: str) -> float:
     try:
-        return float(str(raw).replace("+", "").replace(",", ""))
+        return abs(float(str(raw).replace("+", "").replace(",", "")))
     except (ValueError, TypeError):
         return 0.0
 

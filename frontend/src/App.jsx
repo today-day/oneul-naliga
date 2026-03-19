@@ -205,6 +205,12 @@ function AppLayout() {
 export default function App() {
   const [splashDone, setSplashDone] = useState(false);
 
+  // 저장된 테마 적용
+  useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+  }, []);
+
   return (
     <>
       {!splashDone && <SplashScreen onComplete={() => setSplashDone(true)} />}

@@ -176,6 +176,25 @@ async def get_price(
 
 
 # ─────────────────────────────────────────
+# 투자자별 매매동향
+# ─────────────────────────────────────────
+
+@router.get("/{market}/{symbol}/investors")
+async def get_investors(
+    market: Literal["KOSPI", "KOSDAQ", "US"],
+    symbol: str,
+    count: int = Query(default=20, ge=1, le=60),
+):
+    """종목별 투자자(개인/외국인/기관) 매매동향 조회"""
+    if market == "US":
+        raise HTTPException(status_code=400, detail="해외 종목은 투자자 매매동향을 지원하지 않습니다")
+    try:
+        return await kiwoom.get_investor_trades(symbol, count)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+# ─────────────────────────────────────────
 # 호가 조회
 # ─────────────────────────────────────────
 

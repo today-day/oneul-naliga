@@ -347,6 +347,54 @@ async def get_ranking(rank_type: str) -> list[dict]:
     return []
 
 
+async def get_investor_trades(symbol: str, count: int = 20) -> list[dict]:
+    """
+    종목별 투자자 기관별 매매동향 조회 (ka10060)
+    개인/외국인/기관 순매수 (수량 기준, 단주)
+    """
+    today = datetime.now().strftime("%Y%m%d")
+    token = await get_access_token()
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{BASE_URL}/api/dostk/chart",
+            headers={
+                "authorization": f"Bearer {token}",
+                "Content-Type": "application/json;charset=UTF-8",
+                "api-id": "ka10060",
+                "cont-yn": "N",
+                "next-key": "",
+            },
+            json={
+                "dt": today,
+                "stk_cd": symbol,
+                "amt_qty_tp": "2",   # 수량
+                "trde_tp": "0",      # 순매수
+                "unit_tp": "1",      # 단주
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    results = []
+    for item in data.get("stk_invsr_orgn_chart", [])[:count]:
+        results.append({
+            "date": item.get("dt", ""),
+            "price": abs(_parse_price(item.get("cur_prc", "0"))),
+            "individual": int(item.get("ind_invsr", "0")),
+            "foreign": int(item.get("frgnr_invsr", "0")),
+            "institution": int(item.get("orgn", "0")),
+            "finance": int(item.get("fnnc_invt", "0")),
+            "insurance": int(item.get("insrnc", "0")),
+            "trust": int(item.get("invtrt", "0")),
+            "bank": int(item.get("bank", "0")),
+            "pension": int(item.get("penfnd_etc", "0")),
+            "private_fund": int(item.get("samo_fund", "0")),
+            "etc_corp": int(item.get("etc_corp", "0")),
+        })
+    return results
+
+
 async def get_orderbook(symbol: str) -> dict:
     """
     국내 주식 호가 조회 (ka10004)

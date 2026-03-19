@@ -46,6 +46,11 @@ export const getCandles = (market, symbol, timeframe = "일봉", count = 200) =>
 export const getPrice = (market, symbol) =>
   fetch(`${BASE}/stocks/${market}/${symbol}/price`).then((r) => r.json());
 
+// ── 투자자별 매매동향 ──────────────────────────────
+
+export const getInvestors = (market, symbol, count = 20) =>
+  fetch(`${BASE}/stocks/${market}/${symbol}/investors?count=${count}`).then((r) => r.json());
+
 // ── 호가 조회 ─────────────────────────────────────
 
 export const getOrderbook = (market, symbol) =>

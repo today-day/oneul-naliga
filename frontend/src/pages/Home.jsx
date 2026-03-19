@@ -441,7 +441,7 @@ export default function Home() {
   );
 
   return (
-    <div style={{ maxWidth: isPC ? 1200 : "100%", margin: "0 auto", paddingBottom: isMobile ? 88 : 40, padding: isPC ? "0 40px 40px" : undefined }}>
+    <div style={{ maxWidth: isPC ? 1200 : "100%", margin: "0 auto", padding: isPC ? "0 40px 40px" : "0 0 120px" }}>
 
       {/* ── 2열 그리드 (PC) / 단열 (모바일) ── */}
       <div style={isPC ? { display: "grid", gridTemplateColumns: "1fr 380px", gap: 32, paddingTop: 24 } : {}}>
