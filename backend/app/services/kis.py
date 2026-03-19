@@ -16,6 +16,8 @@ _token_cache: dict = {}
 
 async def get_access_token() -> str:
     """한투 API 액세스 토큰 발급"""
+    if not settings.kis_app_key or not settings.kis_app_secret:
+        raise RuntimeError("KIS API 키가 설정되지 않았습니다")
     now = datetime.now().timestamp()
 
     if _token_cache.get("token") and _token_cache.get("expires_at", 0) > now + 60:

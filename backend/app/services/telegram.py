@@ -31,6 +31,10 @@ async def send_alert(line: dict, current_price: float, target_price: float, diff
         f"→ 설정한 {signal_label}에 근접했습니다"
     )
 
+    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+        print(f"[telegram] 알림 스킵 (토큰 미설정): {line.get('stock_code')} {signal_label}")
+        return
+
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
     async with httpx.AsyncClient() as client:
         await client.post(url, json={
