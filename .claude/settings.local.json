@@ -43,7 +43,9 @@
       "Bash(grep -E \"\\\\.py$\")",
       "Bash(/c/Users/choiy/AppData/Local/Programs/Python/Python312/python.exe -m pip install openpyxl -q)",
       "Bash(/c/Users/choiy/AppData/Local/Programs/Python/Python312/python.exe -c \"import openpyxl; print\\('ok'\\)\")",
-      "Bash(PYTHONIOENCODING=utf-8 python -c \":*)"
+      "Bash(PYTHONIOENCODING=utf-8 python -c \":*)",
+      "Bash(find C:/oneul-naliga -maxdepth 2 -name *.cod)",
+      "Bash(.venv/Scripts/python.exe scripts/import_overseas_stocks.py)"
     ]
   }
 }
