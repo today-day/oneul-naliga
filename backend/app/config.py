@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     kakao_rest_api_key: Optional[str] = None
     kakao_client_secret: Optional[str] = None
 
+    naver_client_id: Optional[str] = None
+    naver_client_secret: Optional[str] = None
+
     class Config:
         env_file = ".env"
 

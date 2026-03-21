@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import stocks, lines, alerts
+from app.routers import stocks, lines, alerts, news
 from app.services.monitor import realtime_monitor, daily_monitor
 from app.services.kiwoom_ws import stream_prices, stream_orderbook
 from app.services.kis_ws import stream_us_prices, stream_us_orderbook
@@ -40,6 +40,7 @@ app.add_middleware(
 app.include_router(stocks.router, prefix="/api")
 app.include_router(lines.router, prefix="/api")
 app.include_router(alerts.router, prefix="/api")
+app.include_router(news.router, prefix="/api")
 
 
 @app.get("/health")

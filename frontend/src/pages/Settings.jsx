@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getWatchlist, removeStock } from "../api/stocks";
 import { useAuth } from "../context/AuthContext";
+import { useDarkMode } from "../hooks/useDarkMode";
 
 const B = "1px solid var(--color-border-tertiary)";
 
@@ -46,6 +47,7 @@ function SectionLabel({ label }) {
 
 export default function Settings() {
   const { user, loginWithKakao, logout } = useAuth();
+  const [dark, toggleDark] = useDarkMode();
 
   // 관심종목
   const [watchlist, setWatchlist] = useState([]);
@@ -70,7 +72,7 @@ export default function Settings() {
       {/* 상단 타이틀 */}
       <div style={{ padding: "28px 20px 12px" }}>
         <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "-0.5px" }}>
-          마이페이지
+          설정
         </h2>
       </div>
 
@@ -182,6 +184,29 @@ export default function Settings() {
               등록된 관심종목이 없습니다
             </p>
           )}
+        </Card>
+
+        {/* 화면 */}
+        <SectionLabel label="화면" />
+        <Card>
+          <Row
+            label="다크 모드"
+            noBorder
+            right={
+              <div onClick={toggleDark} style={{
+                width: 44, height: 26, borderRadius: 13, cursor: "pointer",
+                background: dark ? "#3a9e62" : "var(--color-border-secondary)",
+                position: "relative", transition: "background 0.2s", flexShrink: 0,
+              }}>
+                <div style={{
+                  position: "absolute", top: 3, left: dark ? 21 : 3,
+                  width: 20, height: 20, borderRadius: 10,
+                  background: "white", transition: "left 0.2s",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                }} />
+              </div>
+            }
+          />
         </Card>
 
         {/* 앱 정보 */}

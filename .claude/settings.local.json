@@ -42,7 +42,8 @@
       "Bash(npm list:*)",
       "Bash(grep -E \"\\\\.py$\")",
       "Bash(/c/Users/choiy/AppData/Local/Programs/Python/Python312/python.exe -m pip install openpyxl -q)",
-      "Bash(/c/Users/choiy/AppData/Local/Programs/Python/Python312/python.exe -c \"import openpyxl; print\\('ok'\\)\")"
+      "Bash(/c/Users/choiy/AppData/Local/Programs/Python/Python312/python.exe -c \"import openpyxl; print\\('ok'\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 python -c \":*)"
     ]
   }
 }

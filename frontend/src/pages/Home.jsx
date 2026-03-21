@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLivePrices } from "../hooks/useLivePrice";
+import { getNews, loadKeywords, saveKeywords } from "../api/news";
 
 function useBreakpoint() {
   const get = () => window.innerWidth < 768 ? "mobile" : window.innerWidth < 1100 ? "tablet" : "pc";
@@ -435,6 +436,12 @@ export default function Home() {
   const isPC     = bp === "pc";
   const { user } = useAuth();
   const [apiErrors, setApiErrors] = useState([]);
+  const [news, setNews] = useState([]);
+  const [newsLoading, setNewsLoading] = useState(true);
+  const [newsKeywords, setNewsKeywords] = useState(loadKeywords);
+  const [showKeywordEdit, setShowKeywordEdit] = useState(false);
+  const [keywordInput, setKeywordInput] = useState("");
+  const [showAllNews, setShowAllNews] = useState(false);
   const todayKey = `maintenance_dismissed_${new Date().toISOString().slice(0, 10)}`;
   const alreadyDismissed = localStorage.getItem(todayKey) === "1";
   const [watchlist,   setWatchlist]   = useState([]);
@@ -486,6 +493,14 @@ export default function Home() {
   }, []);
 
   // 관심종목 로드
+  useEffect(() => {
+    setNewsLoading(true);
+    getNews(newsKeywords)
+      .then((data) => setNews(data.news || []))
+      .catch(() => setNews([]))
+      .finally(() => setNewsLoading(false));
+  }, [newsKeywords]);
+
   useEffect(() => {
     getWatchlist(user?.id)
       .then((stocks) => {
@@ -665,9 +680,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* 인기 종목 */}
-          <PopularSection isMobile={isMobile} isPC={isPC} navigate={navigate} onMaintenance={() => { if (!alreadyDismissed) setApiErrors((prev) => prev.includes("kiwoom") ? prev : [...prev, "kiwoom"]); }} />
-
           {/* 모바일·태블릿: 관심종목 */}
           {!isPC && (
             <section style={{ padding: isMobile ? "20px 20px 0" : "20px 24px 0" }}>
@@ -675,6 +687,111 @@ export default function Home() {
               <WatchlistContent liveData={livePrices} />
             </section>
           )}
+
+          {/* 인기 종목 */}
+          <PopularSection isMobile={isMobile} isPC={isPC} navigate={navigate} onMaintenance={() => { if (!alreadyDismissed) setApiErrors((prev) => prev.includes("kiwoom") ? prev : [...prev, "kiwoom"]); }} />
+
+          {/* 뉴스 */}
+          <section style={{ padding: isMobile ? "20px 20px 0" : isPC ? "20px 0 0" : "20px 24px 0" }}>
+            <SectionTitle title="금융 뉴스" action="키워드 설정" onAction={() => setShowKeywordEdit((v) => !v)} />
+
+            {/* 키워드 편집 패널 */}
+            {showKeywordEdit && (
+              <div style={{ background: "var(--color-background-primary)", borderRadius: 12, padding: "14px 16px", marginBottom: 10, boxShadow: "var(--shadow-card)" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                  {newsKeywords.map((kw) => (
+                    <span key={kw} style={{
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                      background: "var(--color-background-tertiary)", borderRadius: 20,
+                      padding: "4px 10px", fontSize: 12, color: "var(--color-text-primary)",
+                    }}>
+                      {kw}
+                      <button onClick={() => {
+                        const next = newsKeywords.filter((k) => k !== kw);
+                        setNewsKeywords(next);
+                        saveKeywords(next);
+                      }} style={{ border: "none", background: "none", cursor: "pointer", padding: 0, fontSize: 14, lineHeight: 1, color: "var(--color-text-tertiary)" }}>×</button>
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    value={keywordInput}
+                    onChange={(e) => setKeywordInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && keywordInput.trim() && !newsKeywords.includes(keywordInput.trim())) {
+                        const next = [...newsKeywords, keywordInput.trim()];
+                        setNewsKeywords(next);
+                        saveKeywords(next);
+                        setKeywordInput("");
+                      }
+                    }}
+                    placeholder="키워드 입력 후 Enter"
+                    style={{
+                      flex: 1, padding: "7px 12px", fontSize: 13, borderRadius: 8,
+                      border: "1px solid var(--color-border-tertiary)",
+                      background: "var(--color-background-secondary)",
+                      color: "var(--color-text-primary)", outline: "none",
+                    }}
+                  />
+                  <button onClick={() => {
+                    if (keywordInput.trim() && !newsKeywords.includes(keywordInput.trim())) {
+                      const next = [...newsKeywords, keywordInput.trim()];
+                      setNewsKeywords(next);
+                      saveKeywords(next);
+                      setKeywordInput("");
+                    }
+                  }} style={{
+                    padding: "7px 14px", fontSize: 13, borderRadius: 8,
+                    border: "none", background: "var(--color-text-primary)",
+                    color: "var(--color-background-primary)", cursor: "pointer", fontWeight: 600,
+                  }}>추가</button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {newsLoading ? (
+                <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-tertiary)" }}>뉴스 불러오는 중...</p>
+              ) : news.length === 0 ? (
+                <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-tertiary)" }}>뉴스를 불러올 수 없습니다.</p>
+              ) : (
+                <>
+                  {(showAllNews ? news : news.slice(0, 3)).map((item, i) => (
+                    <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                      <div style={{
+                        background: "var(--color-background-primary)",
+                        borderRadius: 12, padding: "12px 16px",
+                        boxShadow: "var(--shadow-card)",
+                      }}>
+                        <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", lineHeight: 1.4 }}
+                          dangerouslySetInnerHTML={{ __html: item.title }} />
+                        {item.description && (
+                          <p style={{ margin: "0 0 6px", fontSize: 12, color: "var(--color-text-secondary)", lineHeight: 1.4,
+                            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                            dangerouslySetInnerHTML={{ __html: item.description }} />
+                        )}
+                        <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
+                          {new Date(item.pubDate).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                    </a>
+                  ))}
+                  {news.length > 3 && (
+                    <button onClick={() => setShowAllNews((v) => !v)} style={{
+                      width: "100%", padding: "10px", fontSize: 12, fontWeight: 600,
+                      border: "1px solid var(--color-border-tertiary)", borderRadius: 12,
+                      background: "var(--color-background-primary)", color: "var(--color-text-secondary)",
+                      cursor: "pointer", boxShadow: "var(--shadow-card)",
+                    }}>
+                      {showAllNews ? "접기 ▲" : `더보기 (${news.length - 3}개) ▼`}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </section>
+
         </div>
 
         {/* ── 오른쪽 컬럼: 관심 종목 (PC 전용, sticky) ── */}
