@@ -5,6 +5,7 @@
 - 미국 주식 현재가 조회
 """
 import asyncio
+import json
 import httpx
 from datetime import datetime
 from app.config import settings
@@ -23,23 +24,50 @@ def _get_token_lock() -> asyncio.Lock:
     return _token_lock
 
 
+def _load_token_from_db() -> None:
+    try:
+        from app.database import get_supabase_service
+        db = get_supabase_service()
+        row = db.table("app_settings").select("value").eq("key", "kis_token").execute().data
+        if row:
+            data = json.loads(row[0]["value"])
+            if data.get("token") and data.get("expires_at", 0) > datetime.now().timestamp() + 60:
+                _token_cache.update(data)
+                print(f"[kis] 토큰 DB에서 복원, 만료: {datetime.fromtimestamp(data['expires_at']).strftime('%Y-%m-%d %H:%M')}")
+    except Exception as e:
+        print(f"[kis] 토큰 DB 복원 실패: {e}")
+
+
+async def _save_token_to_db() -> None:
+    try:
+        from app.database import get_supabase_service
+        db = get_supabase_service()
+        db.table("app_settings").upsert({
+            "key": "kis_token",
+            "value": json.dumps(_token_cache),
+            "updated_at": datetime.now().isoformat(),
+        }).execute()
+    except Exception as e:
+        print(f"[kis] 토큰 DB 저장 실패: {e}")
+
+
+_load_token_from_db()
+
+
 async def get_access_token() -> str:
-    """한투 API 액세스 토큰 발급 (캐시 적용, 동시 중복 발급 방지)"""
+    """한투 API 액세스 토큰 발급 (메모리 캐시 + Supabase 영속화)"""
     if not settings.kis_app_key or not settings.kis_app_secret:
         raise RuntimeError("KIS API 키가 설정되지 않았습니다")
     now = datetime.now().timestamp()
 
-    # 락 없이 먼저 캐시 확인 (빠른 경로)
     if _token_cache.get("token") and _token_cache.get("expires_at", 0) > now + 60:
         return _token_cache["token"]
 
     async with _get_token_lock():
-        # 락 획득 후 다시 확인 (다른 코루틴이 이미 발급했을 수 있음)
         now = datetime.now().timestamp()
         if _token_cache.get("token") and _token_cache.get("expires_at", 0) > now + 60:
             return _token_cache["token"]
 
-        # 기존 토큰이 있으면 폐기 후 재발급
         if _token_cache.get("token"):
             await revoke_token()
 
@@ -58,6 +86,7 @@ async def get_access_token() -> str:
         _token_cache["token"] = data["access_token"]
         now = datetime.now().timestamp()
         _token_cache["expires_at"] = now + data.get("expires_in", 86400)
+        await _save_token_to_db()
         print(f"[kis] 토큰 발급 완료, 만료: {datetime.fromtimestamp(_token_cache['expires_at']).strftime('%Y-%m-%d %H:%M')}")
         return _token_cache["token"]
 

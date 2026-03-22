@@ -11,6 +11,7 @@ import Alerts from "./pages/Alerts";
 import Settings from "./pages/Settings";
 import Watchlist from "./pages/Watchlist";
 import SplashScreen from "./components/SplashScreen";
+import WhatsNewModal, { shouldShowWhatsNew } from "./components/WhatsNewModal";
 import { useAlertCount } from "./hooks/useAlertCount";
 import { getIndices, getFX } from "./api/stocks";
 import { prefetchCache } from "./prefetchCache";
@@ -58,8 +59,8 @@ const NAV = [
 function HeartIcon({ active, size = 22 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24"
-      fill={active ? "currentColor" : "none"}
-      stroke="currentColor"
+      fill={active ? "#ec4899" : "none"}
+      stroke={active ? "#ec4899" : "currentColor"}
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
     </svg>
@@ -109,17 +110,17 @@ function MobileHeader() {
           </button>
           {/* 관심종목 (하트) */}
           <button onClick={() => navigate("/watchlist")} style={{
-            border: "none", background: isWatchlist ? "var(--color-background-tertiary)" : "none",
+            border: "none", background: "none",
             cursor: "pointer", padding: 6, borderRadius: 8, lineHeight: 0,
-            color: isWatchlist ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+            color: "var(--color-text-tertiary)",
           }}>
             <HeartIcon active={isWatchlist} size={20} />
           </button>
           {/* 알림 */}
           <button onClick={() => navigate("/alerts")} style={{
-            border: "none", background: location.pathname === "/alerts" ? "var(--color-background-tertiary)" : "none",
+            border: "none", background: "none",
             cursor: "pointer", padding: 6, borderRadius: 8, lineHeight: 0,
-            color: location.pathname === "/alerts" ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+            color: location.pathname === "/alerts" ? "#f59e0b" : "var(--color-text-tertiary)",
             position: "relative",
           }}>
             <Icon d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" size={20} />
@@ -249,10 +250,10 @@ function TopNav() {
         <button onClick={() => navigate("/watchlist")} style={{
           display: "flex", alignItems: "center", gap: 6,
           padding: "6px 14px", borderRadius: 8, border: "none",
-          background: isWatchlist ? "var(--color-background-tertiary)" : "transparent",
+          background: "transparent",
           fontSize: 13, fontWeight: isWatchlist ? 600 : 400,
           cursor: "pointer",
-          color: isWatchlist ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+          color: "var(--color-text-tertiary)",
         }}>
           <HeartIcon active={isWatchlist} size={16} />
           관심종목
@@ -260,13 +261,14 @@ function TopNav() {
 
         {NAV.map((item) => {
           const active = location.pathname === item.path;
+          const isAlert = item.id === "alert";
           return (
             <button key={item.id} onClick={() => navigate(item.path)} style={{
               display: "flex", alignItems: "center", gap: 6,
               padding: "6px 14px", borderRadius: 8,
               border: "none",
-              background: active ? "var(--color-background-tertiary)" : "transparent",
-              color: active ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+              background: "transparent",
+              color: active && isAlert ? "#f59e0b" : active ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
               fontSize: 13, fontWeight: active ? 600 : 400,
               cursor: "pointer",
             }}>
@@ -281,7 +283,7 @@ function TopNav() {
           display: "flex", alignItems: "center",
           padding: avatarUrl ? "4px" : "6px 14px", gap: 6, borderRadius: 8,
           border: "none",
-          background: location.pathname === "/settings" ? "var(--color-background-tertiary)" : "transparent",
+          background: "transparent",
           color: "var(--color-text-tertiary)", cursor: "pointer",
         }}>
           {avatarUrl
@@ -327,8 +329,9 @@ function AppLayout() {
 }
 
 function AppWithSplash() {
-  const { loading: authLoading } = useAuth();
+  const { loading: authLoading, user } = useAuth();
   const [splashDone, setSplashDone] = useState(false);
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   // 스플래시 중 홈 데이터 프리페치
   useEffect(() => {
@@ -340,9 +343,17 @@ function AppWithSplash() {
     });
   }, []);
 
+  // 스플래시 끝나고 로그인 상태면 팝업 표시
+  useEffect(() => {
+    if (splashDone && user && shouldShowWhatsNew()) {
+      setShowWhatsNew(true);
+    }
+  }, [splashDone, user]);
+
   return (
     <>
       {!splashDone && <SplashScreen onComplete={() => setSplashDone(true)} ready={!authLoading} />}
+      {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} />}
       <BrowserRouter>
         <AppLayout />
       </BrowserRouter>

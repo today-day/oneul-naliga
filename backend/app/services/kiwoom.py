@@ -5,6 +5,7 @@
 - 국내 주식 현재가 조회 (ka10001)
 """
 import asyncio
+import json
 import httpx
 from datetime import datetime
 from app.config import settings
@@ -28,16 +29,45 @@ def _get_token_lock() -> asyncio.Lock:
     return _token_lock
 
 
+def _load_token_from_db() -> None:
+    """서버 시작 시 Supabase app_settings에서 토큰 복원"""
+    try:
+        from app.database import get_supabase_service
+        db = get_supabase_service()
+        row = db.table("app_settings").select("value").eq("key", "kiwoom_token").execute().data
+        if row:
+            data = json.loads(row[0]["value"])
+            if data.get("token") and data.get("expires_at", 0) > datetime.now().timestamp() + 60:
+                _token_cache.update(data)
+                print(f"[kiwoom] 토큰 DB에서 복원, 만료: {datetime.fromtimestamp(data['expires_at']).strftime('%Y-%m-%d %H:%M')}")
+    except Exception as e:
+        print(f"[kiwoom] 토큰 DB 복원 실패: {e}")
+
+
+async def _save_token_to_db() -> None:
+    try:
+        from app.database import get_supabase_service
+        db = get_supabase_service()
+        db.table("app_settings").upsert({
+            "key": "kiwoom_token",
+            "value": json.dumps(_token_cache),
+            "updated_at": datetime.now().isoformat(),
+        }).execute()
+    except Exception as e:
+        print(f"[kiwoom] 토큰 DB 저장 실패: {e}")
+
+
+_load_token_from_db()
+
+
 async def get_access_token() -> str:
-    """키움 REST API 액세스 토큰 발급 (캐시 적용, 동시 중복 발급 방지)"""
+    """키움 REST API 액세스 토큰 발급 (메모리 캐시 + Supabase 영속화)"""
     now = datetime.now().timestamp()
 
-    # 락 없이 먼저 캐시 확인 (빠른 경로)
     if _token_cache.get("token") and _token_cache.get("expires_at", 0) > now + 60:
         return _token_cache["token"]
 
     async with _get_token_lock():
-        # 락 획득 후 다시 확인 (다른 코루틴이 이미 발급했을 수 있음)
         now = datetime.now().timestamp()
         if _token_cache.get("token") and _token_cache.get("expires_at", 0) > now + 60:
             return _token_cache["token"]
@@ -54,18 +84,18 @@ async def get_access_token() -> str:
             )
             if resp.status_code in (301, 302, 303, 307, 308):
                 location = resp.headers.get("location", "")
-                print(f"[kiwoom] 🔧 서버 점검 중 (302 redirect → {location})")
+                print(f"[kiwoom] 서버 점검 중 (302 redirect → {location})")
                 raise KiwoomMaintenanceError(f"키움 API 점검 중: {location}")
             resp.raise_for_status()
             data = resp.json()
 
         _token_cache["token"] = data["token"]
-        # expires_dt 형식: "20241107083713" (YYYYMMDDHHmmss)
         try:
             expires_dt = datetime.strptime(data["expires_dt"], "%Y%m%d%H%M%S").timestamp()
             _token_cache["expires_at"] = expires_dt
         except (KeyError, ValueError):
             _token_cache["expires_at"] = now + 86400
+        await _save_token_to_db()
         print(f"[kiwoom] 토큰 발급 완료, 만료: {datetime.fromtimestamp(_token_cache['expires_at']).strftime('%Y-%m-%d %H:%M')}")
         return _token_cache["token"]
 
@@ -315,6 +345,11 @@ def _parse_price(raw: str) -> float:
         return 0.0
 
 
+def _clean_code(code: str) -> str:
+    """키움 API가 반환하는 종목코드에서 _AL 등 suffix 제거 → 순수 6자리 코드"""
+    return code.split("_")[0] if "_" in code else code
+
+
 async def get_domestic_index_candles(inds_cd: str, period: str = "D", count: int = 600) -> list[StockCandle]:
     """
     국내 지수 캔들 조회
@@ -380,7 +415,7 @@ async def get_ranking(rank_type: str) -> list[dict]:
         return [
             {
                 "rank": i + 1,
-                "code": item["stk_cd"],
+                "code": _clean_code(item["stk_cd"]),
                 "name": item["stk_nm"],
                 "price": _parse_price(item.get("past_curr_prc", "0")),
                 "change_pct": item.get("base_comp_chgr", "0.00"),
@@ -399,7 +434,7 @@ async def get_ranking(rank_type: str) -> list[dict]:
         return [
             {
                 "rank": i + 1,
-                "code": item["stk_cd"],
+                "code": _clean_code(item["stk_cd"]),
                 "name": item["stk_nm"],
                 "price": _parse_price(item.get("cur_prc", "0")),
                 "change_pct": item.get("flu_rt", "0.00"),
@@ -416,7 +451,7 @@ async def get_ranking(rank_type: str) -> list[dict]:
         return [
             {
                 "rank": item.get("now_rank", i + 1),
-                "code": item["stk_cd"],
+                "code": _clean_code(item["stk_cd"]),
                 "name": item["stk_nm"],
                 "price": _parse_price(item.get("cur_prc", "0")),
                 "change_pct": item.get("flu_rt", "0.00"),
@@ -435,7 +470,7 @@ async def get_ranking(rank_type: str) -> list[dict]:
         return [
             {
                 "rank": i + 1,
-                "code": item["stk_cd"],
+                "code": _clean_code(item["stk_cd"]),
                 "name": item["stk_nm"],
                 "price": _parse_price(item.get("cur_prc", "0")),
                 "change_pct": item.get("flu_rt", "0.00"),
@@ -455,7 +490,7 @@ async def get_ranking(rank_type: str) -> list[dict]:
         return [
             {
                 "rank": i + 1,
-                "code": item["stk_cd"],
+                "code": _clean_code(item["stk_cd"]),
                 "name": item["stk_nm"],
                 "price": _parse_price(item.get("cur_prc", "0")),
                 "change_pct": item.get("flu_rt", "0.00"),
@@ -472,7 +507,7 @@ async def get_ranking(rank_type: str) -> list[dict]:
         return [
             {
                 "rank": item.get("rank", i + 1),
-                "code": item["stk_cd"],
+                "code": _clean_code(item["stk_cd"]),
                 "name": item["stk_nm"],
                 "price": _parse_price(item.get("cur_prc", "0")),
                 "change_pct": None,
@@ -488,7 +523,7 @@ async def get_ranking(rank_type: str) -> list[dict]:
         return [
             {
                 "rank": i + 1,
-                "code": item["stk_cd"],
+                "code": _clean_code(item["stk_cd"]),
                 "name": item["stk_nm"],
                 "price": None,
                 "change_pct": None,
@@ -510,7 +545,7 @@ async def get_ranking(rank_type: str) -> list[dict]:
         return [
             {
                 "rank": i + 1,
-                "code": item["stk_cd"],
+                "code": _clean_code(item["stk_cd"]),
                 "name": item["stk_nm"],
                 "price": _parse_price(item.get("close_pric", "0")),
                 "change_pct": item.get("pre_rt", "0.00"),

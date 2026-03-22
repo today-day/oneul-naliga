@@ -74,8 +74,8 @@ function ScoreBar({ score, buy, neutral, sell }) {
         <div style={{
           position: "absolute", left: `calc(${score}% - 2px)`, top: -4,
           width: 4, height: 15, borderRadius: 2,
-          background: "var(--color-text-primary)",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+          background: score >= 60 ? "var(--color-signal-buy)" : score <= 40 ? "var(--color-signal-sell)" : "#f59e0b",
+          boxShadow: score >= 60 ? "0 1px 6px rgba(34,197,94,0.6)" : score <= 40 ? "0 1px 6px rgba(239,68,68,0.6)" : "0 1px 6px rgba(245,158,11,0.6)",
         }} />
       </div>
 

@@ -81,17 +81,26 @@ export default function SplashScreen({ onComplete, ready }) {
         </p>
 
         {/* 로딩바 */}
-        <div style={{
-          marginTop: 32, width: 160, height: 3,
-          borderRadius: 99, background: "var(--color-border-primary)",
-          overflow: "hidden",
-        }}>
+        <div style={{ marginTop: 32, width: 160 }}>
           <div style={{
-            height: "100%", borderRadius: 99,
-            background: "linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899)",
-            width: `${progress}%`,
-            transition: "width 0.05s linear",
-          }} />
+            height: 3, borderRadius: 99,
+            background: "var(--color-border-primary)",
+            overflow: "hidden", marginBottom: 8,
+          }}>
+            <div style={{
+              height: "100%", borderRadius: 99,
+              background: "linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899)",
+              width: `${progress}%`,
+              transition: "width 0.05s linear",
+            }} />
+          </div>
+          <p style={{
+            margin: 0, fontSize: 11, fontWeight: 600,
+            color: "var(--color-text-tertiary)",
+            textAlign: "right", fontVariantNumeric: "tabular-nums",
+          }}>
+            {Math.floor(progress)}%
+          </p>
         </div>
       </div>
     </div>

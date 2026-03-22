@@ -90,6 +90,11 @@ input, button { font-family: var(--font-sans); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(40px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── 가로 스크롤 스크롤바 숨김 ── */
 .hide-scrollbar {
   -ms-overflow-style: none;
