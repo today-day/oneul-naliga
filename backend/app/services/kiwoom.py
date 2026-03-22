@@ -246,10 +246,15 @@ async def get_etf_info(stk_cd: str) -> dict | None:
         data = await _call_etf("ka40002", {"stk_cd": stk_cd})
         if data.get("return_code") != 0:
             return None
+        # ETF 고유 필드가 채워져 있을 때만 ETF로 판단 (일반 주식은 둘 다 빈 문자열)
+        txon_type = data.get("etftxon_type", "").strip()
+        idex_nm = data.get("etfobjt_idex_nm", "").strip()
+        if not txon_type and not idex_nm:
+            return None
         return {
-            "stk_nm":       data.get("stk_nm", ""),
+            "stk_nm":       data.get("stk_nm", "").strip(),
             "wonju_pric":   data.get("wonju_pric", "0"),
-            "txon_type":    data.get("etftxon_type", ""),
+            "txon_type":    txon_type,
         }
     except Exception:
         return None

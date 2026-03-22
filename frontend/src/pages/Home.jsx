@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useLivePrices } from "../hooks/useLivePrice";
 import { getNews, loadKeywords, saveKeywords } from "../api/news";
 
 function useBreakpoint() {
@@ -13,9 +12,8 @@ function useBreakpoint() {
   }, []);
   return bp;
 }
-import { getWatchlist, addStock, removeStock, getPrice, detectMarket, searchStocks, getRanking, getOverseasRanking, getIndices, getFX } from "../api/stocks";
+import { getRanking, getOverseasRanking, getIndices, getFX } from "../api/stocks";
 import { MARKET_ITEMS, loadMarketSettings, saveMarketSettings } from "../config/marketItems";
-import { getLines } from "../api/lines";
 import { useAuth } from "../context/AuthContext";
 
 const RANKING_TABS = [
@@ -234,163 +232,6 @@ function PopularSection({ isMobile, isPC, navigate, onMaintenance }) {
   );
 }
 
-// 종목 추가 바텀시트 (검색 자동완성)
-function AddStockSheet({ onClose, onAdd }) {
-  const [query,    setQuery]    = useState("");
-  const [results,  setResults]  = useState([]);
-  const [selected, setSelected] = useState(null); // { code, name, market }
-  const [loading,  setLoading]  = useState(false);
-  const timerRef = useRef(null);
-  const sheetRef = useRef(null);
-  const startY = useRef(0);
-  const onTouchStart = (e) => { startY.current = e.touches[0].clientY; };
-  const onTouchMove = (e) => {
-    const dy = e.touches[0].clientY - startY.current;
-    if (dy > 0 && sheetRef.current) {
-      sheetRef.current.style.transition = "none";
-      sheetRef.current.style.transform = `translateY(${dy}px)`;
-    }
-  };
-  const onTouchEnd = (e) => {
-    const dy = e.changedTouches[0].clientY - startY.current;
-    if (dy > 100) { onClose(); }
-    else if (sheetRef.current) {
-      sheetRef.current.style.transition = "transform 0.3s ease";
-      sheetRef.current.style.transform = "translateY(0)";
-    }
-  };
-
-  const handleInput = (e) => {
-    const val = e.target.value;
-    setQuery(val);
-    setSelected(null);
-    clearTimeout(timerRef.current);
-    if (!val.trim()) { setResults([]); return; }
-    timerRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const data = await searchStocks(val);
-        setResults(data);
-      } catch { setResults([]); }
-      finally { setLoading(false); }
-    }, 250);
-  };
-
-  const handleSelect = (stock) => {
-    setSelected(stock);
-    setQuery(`${stock.name} (${stock.code})`);
-    setResults([]);
-  };
-
-  const handleAdd = () => {
-    if (!selected) return;
-    onAdd(selected);
-  };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)", backdropFilter: "blur(4px)" }} />
-      <div
-        ref={sheetRef}
-        style={{
-          position: "relative", background: "var(--color-background-primary)",
-          borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480,
-          padding: "0 0 env(safe-area-inset-bottom, 0px)",
-        }}
-      >
-        <div
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px", cursor: "grab" }}
-        >
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--color-border-secondary)" }} />
-        </div>
-        <div style={{ padding: "8px 20px 24px" }}>
-          <div style={{ marginBottom: 16 }}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: "var(--color-text-primary)" }}>종목 추가</span>
-          </div>
-
-          {/* 검색 입력 */}
-          <div style={{ position: "relative" }}>
-            <input
-              autoFocus
-              value={query}
-              onChange={handleInput}
-              placeholder="종목명 또는 코드 검색 (예: 삼성, AAPL)"
-              style={{
-                width: "100%", padding: "12px 14px", fontSize: 15,
-                border: B, borderRadius: 10, outline: "none",
-                boxSizing: "border-box",
-                background: "var(--color-background-secondary)",
-                color: "var(--color-text-primary)",
-              }}
-            />
-            {loading && (
-              <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 12, color: "var(--color-text-tertiary)" }}>
-                검색 중...
-              </span>
-            )}
-          </div>
-
-          {/* 검색 결과 목록 */}
-          {results.length > 0 && (
-            <div style={{ marginTop: 8, background: "var(--color-background-secondary)", borderRadius: 10, border: B, overflow: "hidden" }}>
-              {results.map((s, i) => (
-                <div key={s.code} onClick={() => handleSelect(s)}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "12px 14px", borderBottom: i < results.length - 1 ? B : "none",
-                    cursor: "pointer",
-                  }}>
-                  <div>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>{s.name}</span>
-                    <span style={{ marginLeft: 8, fontSize: 12, color: "var(--color-text-tertiary)" }}>{s.code}</span>
-                  </div>
-                  <span style={{
-                    fontSize: 10, padding: "2px 7px", borderRadius: 4, fontWeight: 600,
-                    background: s.market === "해외" ? "var(--color-background-info)" : "var(--color-background-success)",
-                    color: s.market === "해외" ? "var(--color-text-info)" : "var(--color-text-success)",
-                  }}>
-                    {s.market === "해외" ? "US" : "KR"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 선택된 종목 확인 */}
-          {selected && (
-            <div style={{ marginTop: 12, padding: "12px 14px", background: "var(--color-background-secondary)", borderRadius: 10, border: B, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>{selected.name}</span>
-                <span style={{ marginLeft: 8, fontSize: 12, color: "var(--color-text-tertiary)" }}>{selected.code}</span>
-              </div>
-              <span style={{
-                fontSize: 10, padding: "2px 7px", borderRadius: 4, fontWeight: 600,
-                background: selected.market === "해외" ? "var(--color-background-info)" : "var(--color-background-success)",
-                color: selected.market === "해외" ? "var(--color-text-info)" : "var(--color-text-success)",
-              }}>
-                {selected.market === "해외" ? "US" : "KR"}
-              </span>
-            </div>
-          )}
-
-          <button onClick={handleAdd} disabled={!selected}
-            style={{
-              width: "100%", padding: "14px 0", fontSize: 15, fontWeight: 700,
-              background: "var(--color-text-primary)", color: "var(--color-background-primary)",
-              border: "none", borderRadius: 12, cursor: selected ? "pointer" : "default",
-              marginTop: 16, opacity: selected ? 1 : 0.4,
-            }}>
-            추가하기
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── 메인 컴포넌트 ────────────────────────────────────────────────────
 
 function MaintenanceModal({ errors, onClose }) {
@@ -455,10 +296,6 @@ export default function Home() {
   const [showAllNews, setShowAllNews] = useState(false);
   const todayKey = `maintenance_dismissed_${new Date().toISOString().slice(0, 10)}`;
   const alreadyDismissed = localStorage.getItem(todayKey) === "1";
-  const [watchlist,   setWatchlist]   = useState([]);
-  const [stockMeta,   setStockMeta]   = useState({});
-  const [showAddSheet, setShowAddSheet] = useState(false);
-  const [loadingList,  setLoadingList]  = useState(true);
   const [marketData,     setMarketData]     = useState({});
   const [marketSettings, setMarketSettings] = useState(loadMarketSettings);
   const [showMarketEdit, setShowMarketEdit] = useState(false);
@@ -480,8 +317,6 @@ export default function Home() {
       marketSheetRef.current.style.transform = "translateY(0)";
     }
   };
-  const watchlistCodes = useMemo(() => watchlist.map((s) => s.code), [watchlist]);
-  const livePrices = useLivePrices(watchlistCodes);
 
   // 지수 + 환율 로드 → 통합 marketData
   useEffect(() => {
@@ -503,7 +338,6 @@ export default function Home() {
     });
   }, []);
 
-  // 관심종목 로드
   useEffect(() => {
     setNewsLoading(true);
     getNews(newsKeywords)
@@ -512,148 +346,13 @@ export default function Home() {
       .finally(() => setNewsLoading(false));
   }, [newsKeywords]);
 
-  useEffect(() => {
-    getWatchlist(user?.id)
-      .then((stocks) => {
-        setWatchlist(stocks);
-        // 각 종목 라인 정보 병렬 로드
-        stocks.forEach((s) => loadStockMeta(s.code, s.exchange || "NAS"));
-      })
-      .catch(() => setWatchlist([]))
-      .finally(() => setLoadingList(false));
-  }, [user?.id]);
-
-  const loadStockMeta = async (code, exchange = "NAS") => {
-    const market = detectMarket(code);
-    const [priceData, lines] = await Promise.all([
-      getPrice(market, code, exchange).catch(() => null),
-      getLines(code, user?.id).catch(() => []),
-    ]);
-
-    // 가장 가까운 선 계산
-    const price = priceData?.price ?? null;
-    const changePctMeta = priceData?.change_pct ?? null;
-    const changeAmtMeta = priceData?.change_amt ?? null;
-    let nearest = null;
-    if (price && lines.length > 0) {
-      const withDist = lines
-        .filter((l) => l.line_type === "horizontal" && l.price)
-        .map((l) => ({ ...l, dist: ((price - l.price) / l.price) * 100 }));
-      if (withDist.length > 0) {
-        const closest = withDist.reduce((a, b) => Math.abs(a.dist) < Math.abs(b.dist) ? a : b);
-        nearest = { type: closest.signal_type === "loss" ? "지지선" : "저항선", dist: Number(closest.dist.toFixed(2)) };
-      }
-    }
-
-    setStockMeta((prev) => ({
-      ...prev,
-      [code]: { price, change_pct: changePctMeta, change_amt: changeAmtMeta, lineCount: lines.length, nearest },
-    }));
-  };
-
-  const handleAddStock = async (body) => {
-    try {
-      const saved = await addStock({ ...body, user_id: user?.id });
-      setWatchlist((prev) => [...prev, saved]);
-      loadStockMeta(saved.code);
-    } catch (e) {
-      if (e?.message?.includes("409")) alert("이미 등록된 종목입니다.");
-    }
-    setShowAddSheet(false);
-  };
-
-  const handleRemoveStock = async (code, e) => {
-    e.stopPropagation();
-    await removeStock(code, user?.id).catch(() => {});
-    setWatchlist((prev) => prev.filter((s) => s.code !== code));
-    setStockMeta((prev) => { const n = { ...prev }; delete n[code]; return n; });
-  };
-
-  // 관심종목 공통 렌더러
-  const WatchlistContent = ({ liveData = {} }) => (
-    <div style={{ background: "var(--color-background-primary)", borderRadius: 16, overflow: "hidden", boxShadow: "var(--shadow-card)" }}>
-      {loadingList ? (
-        <p style={{ padding: "32px 20px", textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>불러오는 중...</p>
-      ) : watchlist.length === 0 ? (
-        <div style={{ padding: "36px 20px", textAlign: "center" }}>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--color-text-tertiary)" }}>관심 종목을 추가해보세요.</p>
-          <button onClick={() => setShowAddSheet(true)}
-            style={{ marginTop: 12, padding: "9px 20px", fontSize: 13, fontWeight: 600, background: "var(--color-text-primary)", color: "var(--color-background-primary)", border: "none", borderRadius: 10, cursor: "pointer" }}>
-            + 종목 추가
-          </button>
-        </div>
-      ) : (
-        watchlist.map((stock, i) => {
-          const meta    = stockMeta[stock.code];
-          const isDom   = /^\d{6}$/.test(stock.code);
-          const live    = liveData[stock.code];
-          const price   = live?.price ?? meta?.price;
-          const changePct = live?.change_pct ?? meta?.change_pct ?? null;
-          const changeAmt = meta?.change_amt ?? null;
-          const nearest = meta?.nearest;
-          return (
-            <div key={stock.id ?? stock.code} onClick={() => navigate(`/chart/${stock.code}`, { state: { name: stock.name, market: stock.market === "해외" ? "US" : "KOSPI", exchange: stock.exchange || "NAS" } })}
-              className="row-hover"
-              style={{ display: "flex", alignItems: "center", padding: "14px 16px", gap: 12, borderBottom: i < watchlist.length - 1 ? B : "none", cursor: "pointer" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>{stock.name}</span>
-                  <span style={{ fontSize: 9, padding: "2px 5px", borderRadius: 4, fontWeight: 600, background: stock.market === "해외" ? "var(--color-background-info)" : "var(--color-background-success)", color: stock.market === "해외" ? "var(--color-text-info)" : "var(--color-text-success)" }}>
-                    {stock.market === "해외" ? "US" : "KR"}
-                  </span>
-                </div>
-                <span style={{ fontSize: 11, color: "var(--color-text-tertiary)" }}>
-                  {stock.code} · 선 {meta?.lineCount ?? 0}개
-                </span>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                {price != null ? (
-                  <>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>
-                      {isDom ? price.toLocaleString() + "원" : "$" + price.toLocaleString()}
-                    </p>
-                    {changePct && (() => {
-                      const isUp = !changePct.startsWith("-");
-                      const amt = (changeAmt != null && changeAmt !== 0)
-                        ? changeAmt
-                        : (price ? Math.abs(price * parseFloat(changePct) / 100) : null);
-                      const amtStr = amt
-                        ? (isDom ? Math.round(amt).toLocaleString() : amt.toFixed(2))
-                        : null;
-                      return (
-                        <p style={{ margin: 0, fontSize: 11, fontWeight: 500, color: isUp ? "var(--color-rise)" : "var(--color-fall)" }}>
-                          {isUp ? "▲" : "▼"}{amtStr ? `${amtStr} ` : ""}({changePct}%)
-                        </p>
-                      );
-                    })()}
-                  </>
-                ) : (
-                  <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-tertiary)" }}>—</p>
-                )}
-              </div>
-              {nearest && (
-                <div style={{ textAlign: "right", minWidth: 52 }}>
-                  <p style={{ margin: "0 0 2px", fontSize: 10, color: "var(--color-text-tertiary)" }}>{nearest.type}</p>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: Math.abs(nearest.dist) < 1 ? "var(--color-text-danger)" : nearest.dist < 0 ? "var(--color-text-success)" : "var(--color-text-warning)" }}>
-                    {nearest.dist > 0 ? "+" : ""}{nearest.dist}%
-                  </span>
-                </div>
-              )}
-              <button onClick={(e) => handleRemoveStock(stock.code, e)}
-                style={{ border: "none", background: "none", cursor: "pointer", fontSize: 18, color: "var(--color-text-tertiary)", padding: "0 2px", flexShrink: 0 }}>×</button>
-            </div>
-          );
-        })
-      )}
-    </div>
-  );
 
   return (
     <div style={{ maxWidth: isPC ? 1200 : "100%", margin: "0 auto", padding: isPC ? "0 40px 40px" : "0 0 40px" }}>
       {apiErrors.length > 0 && <MaintenanceModal errors={apiErrors} onClose={() => { localStorage.setItem(todayKey, "1"); setApiErrors([]); }} />}
 
       {/* ── 2열 그리드 (PC) / 단열 (모바일) ── */}
-      <div style={isPC ? { display: "grid", gridTemplateColumns: "1fr 380px", gap: 32, paddingTop: 24 } : {}}>
+      <div style={isPC ? { paddingTop: 24 } : {}}>
 
         {/* ── 왼쪽 컬럼: 시장 지수 · 환율 · 인기 종목 (+ 모바일엔 관심종목도) ── */}
         <div>
@@ -714,14 +413,6 @@ export default function Home() {
               })}
             </div>
           </section>
-
-          {/* 모바일·태블릿: 관심종목 */}
-          {!isPC && (
-            <section style={{ padding: isMobile ? "20px 20px 0" : "20px 24px 0" }}>
-              <SectionTitle title="관심 종목" action="+ 추가" onAction={() => setShowAddSheet(true)} />
-              <WatchlistContent liveData={livePrices} />
-            </section>
-          )}
 
           {/* 인기 종목 */}
           <PopularSection isMobile={isMobile} isPC={isPC} navigate={navigate} onMaintenance={() => { if (!alreadyDismissed) setApiErrors((prev) => prev.includes("kiwoom") ? prev : [...prev, "kiwoom"]); }} />
@@ -829,19 +520,8 @@ export default function Home() {
 
         </div>
 
-        {/* ── 오른쪽 컬럼: 관심 종목 (PC 전용, sticky) ── */}
-        {isPC && (
-          <div style={{ position: "sticky", top: 76, alignSelf: "start" }}>
-            <SectionTitle title="관심 종목" action="+ 추가" onAction={() => setShowAddSheet(true)} />
-            <WatchlistContent liveData={livePrices} />
-          </div>
-        )}
 
       </div>
-
-      {showAddSheet && (
-        <AddStockSheet onClose={() => setShowAddSheet(false)} onAdd={handleAddStock} />
-      )}
 
       {/* 마켓 편집 시트 */}
       {showMarketEdit && (

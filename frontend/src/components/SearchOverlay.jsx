@@ -67,7 +67,7 @@ export default function SearchOverlay({ onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "var(--color-background-primary)" }}>
       {/* 검색 바 */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid var(--color-border-tertiary)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", paddingTop: "calc(env(safe-area-inset-top, 0px) + 10px)", borderBottom: "1px solid var(--color-border-tertiary)" }}>
         <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, fontSize: 18, color: "var(--color-text-secondary)", lineHeight: 1, flexShrink: 0 }}>
           ←
         </button>

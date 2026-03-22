@@ -9,6 +9,7 @@ import IndexDetail from "./pages/IndexDetail";
 import DomesticIndexDetail from "./pages/DomesticIndexDetail";
 import Alerts from "./pages/Alerts";
 import Settings from "./pages/Settings";
+import Watchlist from "./pages/Watchlist";
 import SplashScreen from "./components/SplashScreen";
 import { useAlertCount } from "./hooks/useAlertCount";
 import SearchOverlay from "./components/SearchOverlay";
@@ -52,22 +53,47 @@ const NAV = [
 
 // ── 모바일: 상단 헤더 (로고 + 아이콘들) ──
 
+function HeartIcon({ active, size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24"
+      fill={active ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  );
+}
+
+function useScrolled(threshold = 10) {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > threshold);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [threshold]);
+  return scrolled;
+}
+
 function MobileHeader() {
   const navigate = useNavigate();
   const location = useLocation();
   const alertCount = useAlertCount();
+  const { user } = useAuth();
   const [showSearch, setShowSearch] = useState(false);
+  const scrolled = useScrolled();
 
   if (location.pathname.startsWith("/chart/")) return null;
+
+  const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
+  const isWatchlist = location.pathname === "/watchlist";
 
   return (
     <>
     <header style={{
       position: "sticky", top: 0, zIndex: 20,
-      background: "var(--header-bg)",
-      backdropFilter: "blur(20px) saturate(180%)",
-      WebkitBackdropFilter: "blur(20px) saturate(180%)",
-      borderBottom: "1px solid var(--header-border)",
+      background: scrolled ? "var(--header-bg)" : "transparent",
+      borderBottom: scrolled ? "1px solid var(--header-border)" : "none",
+      transition: "background 0.2s ease, border-color 0.2s ease",
       paddingTop: "env(safe-area-inset-top, 0px)",
     }}>
       <div style={{ height: 52, padding: "0 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -78,6 +104,14 @@ function MobileHeader() {
           {/* 검색 */}
           <button onClick={() => setShowSearch(true)} style={{ border: "none", background: "none", cursor: "pointer", padding: 6, lineHeight: 0, color: "var(--color-text-tertiary)" }}>
             <Icon d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" size={20} />
+          </button>
+          {/* 관심종목 (하트) */}
+          <button onClick={() => navigate("/watchlist")} style={{
+            border: "none", background: isWatchlist ? "var(--color-background-tertiary)" : "none",
+            cursor: "pointer", padding: 6, borderRadius: 8, lineHeight: 0,
+            color: isWatchlist ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+          }}>
+            <HeartIcon active={isWatchlist} size={20} />
           </button>
           {/* 알림 */}
           <button onClick={() => navigate("/alerts")} style={{
@@ -100,13 +134,16 @@ function MobileHeader() {
               </span>
             )}
           </button>
-          {/* 설정 */}
+          {/* 프로필 */}
           <button onClick={() => navigate("/settings")} style={{
             border: "none", background: location.pathname === "/settings" ? "var(--color-background-tertiary)" : "none",
-            cursor: "pointer", padding: 6, borderRadius: 8, lineHeight: 0,
+            cursor: "pointer", padding: avatarUrl ? 2 : 6, borderRadius: 8, lineHeight: 0,
             color: location.pathname === "/settings" ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
           }}>
-            <Icon d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" d2="M12 3a4 4 0 100 8 4 4 0 000-8z" size={20} />
+            {avatarUrl
+              ? <img src={avatarUrl} alt="profile" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", display: "block" }} />
+              : <Icon d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" d2="M12 3a4 4 0 100 8 4 4 0 000-8z" size={20} />
+            }
           </button>
         </div>
       </div>
@@ -145,8 +182,6 @@ function BottomNav() {
     <nav style={{
       position: "fixed", bottom: 0, left: 0, right: 0,
       background: "var(--header-bg)",
-      backdropFilter: "blur(20px) saturate(180%)",
-      WebkitBackdropFilter: "blur(20px) saturate(180%)",
       boxShadow: "0 -1px 0 var(--header-border)",
       display: "flex",
       paddingBottom: "env(safe-area-inset-bottom, 0px)",
@@ -178,16 +213,20 @@ function BottomNav() {
 function TopNav() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [showSearch, setShowSearch] = useState(false);
+  const scrolled = useScrolled();
+
+  const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture;
+  const isWatchlist = location.pathname === "/watchlist";
 
   return (
     <>
     <header style={{
       position: "sticky", top: 0, zIndex: 50,
-      background: "var(--header-bg)",
-      backdropFilter: "blur(20px) saturate(180%)",
-      WebkitBackdropFilter: "blur(20px) saturate(180%)",
-      borderBottom: "1px solid var(--header-border)",
+      background: scrolled ? "var(--header-bg)" : "transparent",
+      borderBottom: scrolled ? "1px solid var(--header-border)" : "none",
+      transition: "background 0.2s ease, border-color 0.2s ease",
       height: 52,
       padding: "0 32px",
       display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -202,6 +241,19 @@ function TopNav() {
         <button onClick={() => setShowSearch(true)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 8, border: "none", background: "transparent", color: "var(--color-text-tertiary)", fontSize: 13, cursor: "pointer" }}>
           <Icon d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" size={16} />
           검색
+        </button>
+
+        {/* 관심종목 (하트) */}
+        <button onClick={() => navigate("/watchlist")} style={{
+          display: "flex", alignItems: "center", gap: 6,
+          padding: "6px 14px", borderRadius: 8, border: "none",
+          background: isWatchlist ? "var(--color-background-tertiary)" : "transparent",
+          fontSize: 13, fontWeight: isWatchlist ? 600 : 400,
+          cursor: "pointer",
+          color: isWatchlist ? "var(--color-text-primary)" : "var(--color-text-tertiary)",
+        }}>
+          <HeartIcon active={isWatchlist} size={16} />
+          관심종목
         </button>
 
         {NAV.map((item) => {
@@ -221,6 +273,20 @@ function TopNav() {
             </button>
           );
         })}
+
+        {/* 프로필 */}
+        <button onClick={() => navigate("/settings")} style={{
+          display: "flex", alignItems: "center",
+          padding: avatarUrl ? "4px" : "6px 14px", gap: 6, borderRadius: 8,
+          border: "none",
+          background: location.pathname === "/settings" ? "var(--color-background-tertiary)" : "transparent",
+          color: "var(--color-text-tertiary)", cursor: "pointer",
+        }}>
+          {avatarUrl
+            ? <img src={avatarUrl} alt="profile" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", display: "block" }} />
+            : <Icon d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" d2="M12 3a4 4 0 100 8 4 4 0 000-8z" size={16} />
+          }
+        </button>
       </div>
     </header>
     {showSearch && <SearchOverlay onClose={() => setShowSearch(false)} />}
@@ -248,6 +314,7 @@ function AppLayout() {
           <Route path="/chart/:code"   element={<ChartDetail />} />
           <Route path="/index/:id"        element={<IndexDetail />} />
           <Route path="/domestic/:id"     element={<DomesticIndexDetail />} />
+          <Route path="/watchlist"     element={<Watchlist />} />
           <Route path="/alerts"        element={<Alerts />} />
           <Route path="/settings"      element={<Settings />} />
           <Route path="/auth/callback" element={<AuthCallback />} />

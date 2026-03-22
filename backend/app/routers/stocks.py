@@ -6,6 +6,8 @@ import httpx
 from app.services import kiwoom, kis
 from app.services.kiwoom import KiwoomMaintenanceError
 from app.services.peak_detector import find_peaks, find_valleys
+from app.services.indicators import calculate_indicators, detect_support_resistance
+from app.services.indicator_ws import _get_benchmark
 from app.database import get_supabase
 from app.config import settings
 from app.data.stock_list import search_stocks, get_exchanges
@@ -417,3 +419,95 @@ async def get_peaks(
         "peaks":   [{"date": dates[i], "price": highs[i]}  for i in peak_idx],
         "valleys": [{"date": dates[i], "price": lows[i]}   for i in valley_idx],
     }
+
+
+# ─────────────────────────────────────────
+# 기술적 지표
+# ─────────────────────────────────────────
+
+class IndicatorRequest(BaseModel):
+    code: str
+    candle_type: str = "D"   # "1"|"5"|"60"|"D"|"W"|"M"
+
+
+@router.post("/indicators")
+async def get_indicators(body: IndicatorRequest):
+    """
+    기술적 지표 계산 (국내 종목 전용)
+    candle_type: "1"=1분봉, "5"=5분봉, "60"=60분봉, "D"=일봉, "W"=주봉, "M"=월봉
+    """
+    try:
+        ct = body.candle_type
+        if ct == "D":
+            candles = await kiwoom.get_daily_candles(body.code, count=300)
+        elif ct == "W":
+            candles = await kiwoom.get_weekly_candles(body.code, count=150)
+        elif ct == "M":
+            candles = await kiwoom.get_monthly_candles(body.code, count=120)
+        else:
+            interval = int(ct)
+            candles = await kiwoom.get_minute_candles(body.code, interval=interval, count=300)
+
+        if not candles:
+            raise HTTPException(status_code=404, detail="캔들 데이터 없음")
+
+        benchmark = await _get_benchmark() if ct == "D" else None
+        result = await calculate_indicators(candles, benchmark)
+        result["code"] = body.code
+        result["candle_type"] = ct
+        return result
+    except KiwoomMaintenanceError:
+        raise HTTPException(status_code=503, detail="서버 점검 중입니다")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+
+# ─────────────────────────────────────────
+# 지지 / 저항 자동 감지
+# ─────────────────────────────────────────
+
+@router.get("/{stock_code}/support-resistance")
+async def get_support_resistance(
+    stock_code: str,
+    candle_type: str = Query(default="D"),
+    order: int = Query(default=5, ge=3, le=15),
+):
+    """
+    지지/저항 구간 자동 감지 (국내 종목 전용)
+    candle_type: "D"=일봉, "W"=주봉, "1"|"5"|"60"=분봉
+    order: 파동 크기 (3=작은, 5=중간, 10=큰)
+    """
+    try:
+        if candle_type == "D":
+            candles = await kiwoom.get_daily_candles(stock_code, count=200)
+        elif candle_type == "W":
+            candles = await kiwoom.get_weekly_candles(stock_code, count=150)
+        else:
+            interval = int(candle_type)
+            candles = await kiwoom.get_minute_candles(stock_code, interval=interval, count=200)
+
+        if not candles:
+            raise HTTPException(status_code=404, detail="캔들 데이터 없음")
+
+        current_price = float(candles[0].close)
+        result = await detect_support_resistance(candles, current_price, order=order)
+
+        if result is None:
+            raise HTTPException(status_code=422, detail="캔들 수 부족")
+
+        return {
+            "stock_code":    stock_code,
+            "current_price": current_price,
+            "candle_type":   candle_type,
+            "order":         order,
+            **result,
+        }
+    except KiwoomMaintenanceError:
+        raise HTTPException(status_code=503, detail="서버 점검 중입니다")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))

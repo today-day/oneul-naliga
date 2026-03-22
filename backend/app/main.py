@@ -13,6 +13,7 @@ from app.routers import stocks, lines, alerts, news
 from app.services.monitor import realtime_monitor, daily_monitor
 from app.services.kiwoom_ws import stream_prices, stream_orderbook
 from app.services.kis_ws import stream_us_prices, stream_us_orderbook
+from app.services.indicator_ws import get_or_create_session, cleanup_empty_sessions
 
 
 @asynccontextmanager
@@ -132,6 +133,26 @@ async def ws_orderbook(websocket: WebSocket, codes: str = ""):
         pass
     finally:
         stream_task.cancel()
+
+
+@app.websocket("/ws/indicators/{stock_code}")
+async def ws_indicators(websocket: WebSocket, stock_code: str, candle_type: str = "D"):
+    """
+    실시간 기술적 지표 WebSocket (국내 종목 전용)
+    연결: ws://localhost:8000/ws/indicators/005930?candle_type=D
+    수신: {code, candle_type, timestamp, signal_summary, categories}
+    """
+    await websocket.accept()
+    session = get_or_create_session(stock_code, candle_type)
+    await session.add_client(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        session.remove_client(websocket)
+        cleanup_empty_sessions()
 
 
 def _parse_us_codes(codes: str) -> list[dict]:

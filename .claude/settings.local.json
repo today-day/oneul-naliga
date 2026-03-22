@@ -45,7 +45,17 @@
       "Bash(/c/Users/choiy/AppData/Local/Programs/Python/Python312/python.exe -c \"import openpyxl; print\\('ok'\\)\")",
       "Bash(PYTHONIOENCODING=utf-8 python -c \":*)",
       "Bash(find C:/oneul-naliga -maxdepth 2 -name *.cod)",
-      "Bash(.venv/Scripts/python.exe scripts/import_overseas_stocks.py)"
+      "Bash(.venv/Scripts/python.exe scripts/import_overseas_stocks.py)",
+      "Bash(.venv/Scripts/python.exe -c \"import pandas_ta; print\\(''ok''\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import pandas_ta; print\\(''pandas-ta ok''\\)\")",
+      "Bash(.venv/Scripts/pip.exe install:*)",
+      "Bash(.venv/Scripts/python.exe -m pip install pandas-ta)",
+      "Bash(.venv/Scripts/python.exe -c \"import pandas_ta as ta; print\\(''ok'', ta.__version__\\)\")",
+      "Bash(grep -r \"WS_URL\\\\|ws://\" /c/oneul-naliga/frontend/src/hooks/ --include=*.js --include=*.jsx -l)",
+      "Bash(grep -r \"WS_URL\\\\|new WebSocket\" /c/oneul-naliga/frontend/src/ --include=*.jsx -l)",
+      "Bash(.venv/Scripts/python.exe -c \"from app.main import app; print\\('main OK'\\)\" 2>&1)",
+      "Bash(.venv/Scripts/python.exe -c \"from app.routers.stocks import router; print\\('stocks router OK'\\)\" 2>&1)",
+      "Bash(.venv/Scripts/python.exe -c \"\nimport asyncio\nfrom app.services.kiwoom import _call_etf\n\nasync def test\\(\\):\n    data = await _call_etf\\('ka40002', {'stk_cd': '005930'}\\)\n    print\\(data\\)\n\nasyncio.run\\(test\\(\\)\\)\n\")"
     ]
   }
 }

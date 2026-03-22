@@ -51,6 +51,12 @@
   /* === 활성 버튼 (선택됨) === */
   --btn-active-bg:   #111827;
   --btn-active-text: #ffffff;
+
+  /* === 지표 신호 (매수=빨강, 매도=파랑 — 한국 관례) === */
+  --color-signal-buy:  #ef4444;
+  --color-signal-sell: #3b82f6;
+  --color-signal-bg-buy:  rgba(239, 68, 68, 0.09);
+  --color-signal-bg-sell: rgba(59, 130, 246, 0.09);
 }
 
 * { box-sizing: border-box; }
@@ -105,9 +111,9 @@ button {
   transition: all 0.12s ease;
 }
 
-/* ── 헤더 유리 변수 (라이트/다크) ── */
+/* ── 헤더 변수 (라이트/다크) ── */
 :root {
-  --header-bg: rgba(255, 255, 255, 0.72);
+  --header-bg: #eef8f4;
   --header-border: rgba(0, 0, 0, 0.06);
 }
 
@@ -150,12 +156,18 @@ button {
   --shadow-float:  0 8px 28px rgba(0,0,0,0.5);
   --shadow-nav:    0 -1px 0 rgba(255,255,255,0.06);
 
-  --header-bg: rgba(28, 28, 30, 0.88);
+  --header-bg: #111111;
   --header-border: rgba(255, 255, 255, 0.06);
 
   /* === 활성 버튼 (다크) === */
   --btn-active-bg:   #4a4a4e;
   --btn-active-text: #ffffff;
+
+  /* === 지표 신호 (다크 — 한국 관례) === */
+  --color-signal-buy:  #ff453a;
+  --color-signal-sell: #0a84ff;
+  --color-signal-bg-buy:  rgba(255, 69, 58, 0.15);
+  --color-signal-bg-sell: rgba(10, 132, 255, 0.15);
 }
 
 [data-theme="dark"] body {

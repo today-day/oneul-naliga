@@ -6,6 +6,7 @@ import EditLineSheet from "../components/EditLineSheet";
 import AutoDetectPanel from "../components/AutoDetectPanel";
 import OrderbookPanel from "../components/OrderbookPanel";
 import InvestorPanel from "../components/InvestorPanel";
+import IndicatorPanel from "../components/IndicatorPanel";
 import { getCandles, getPrice, detectMarket, searchStocks, getWatchlist, addStock, removeStock, getOrderbook, getEtfInfo, getEtfDaily } from "../api/stocks";
 import { useLivePrice } from "../hooks/useLivePrice";
 import { useOrderbook } from "../hooks/useOrderbook";
@@ -611,10 +612,12 @@ export default function ChartDetail() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
               onClick={handleWatchlistToggle}
-              style={{ border: "none", background: "none", cursor: "pointer", padding: 4, fontSize: 20, lineHeight: 1, color: isWatchlisted ? "#f59e0b" : "var(--color-text-tertiary)" }}
+              style={{ border: "none", background: "none", cursor: "pointer", padding: 4, lineHeight: 0 }}
               title={isWatchlisted ? "관심목록에서 제거" : "관심목록에 추가"}
             >
-              {isWatchlisted ? "★" : "☆"}
+              <svg width={22} height={22} viewBox="0 0 24 24" fill={isWatchlisted ? "#ec4899" : "none"} stroke={isWatchlisted ? "#ec4899" : "var(--color-text-tertiary)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
             </button>
             <div style={{ textAlign: "right" }}>
               <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--color-text-primary)", letterSpacing: "-0.3px" }}>
@@ -635,10 +638,12 @@ export default function ChartDetail() {
           {stockName && <span style={{ fontSize: 14, color: "var(--color-text-tertiary)" }}>{code}</span>}
           <button
             onClick={handleWatchlistToggle}
-            style={{ border: "none", background: "none", cursor: "pointer", padding: "2px 4px", fontSize: 22, lineHeight: 1, color: isWatchlisted ? "#f59e0b" : "var(--color-text-tertiary)" }}
+            style={{ border: "none", background: "none", cursor: "pointer", padding: "2px 4px", lineHeight: 0 }}
             title={isWatchlisted ? "관심목록에서 제거" : "관심목록에 추가"}
           >
-            {isWatchlisted ? "★" : "☆"}
+            <svg width={24} height={24} viewBox="0 0 24 24" fill={isWatchlisted ? "#ec4899" : "none"} stroke={isWatchlisted ? "#ec4899" : "var(--color-text-tertiary)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
           </button>
           <span style={{ fontSize: 24, fontWeight: 700, color: "var(--color-text-primary)" }}>
             {isDomestic ? displayPrice.toLocaleString() + "원" : "$" + displayPrice.toLocaleString()}
@@ -835,6 +840,14 @@ export default function ChartDetail() {
             </div>
           )}
 
+          {/* 기술적 분석 */}
+          <div style={{ background: "var(--color-background-primary)", borderRadius: 12, border: B, overflow: "hidden" }}>
+            <div style={{ padding: "12px 20px", borderBottom: B }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>기술적 분석</span>
+            </div>
+            <IndicatorPanel code={code} market={market} timeframe={timeframe} />
+          </div>
+
         </div>
       )}
 
@@ -890,7 +903,8 @@ export default function ChartDetail() {
               { key: "lines", label: `선 목록 (${lines.length})` },
               { key: "orderbook", label: "호가" },
               { key: "investor", label: "투자자" },
-              { key: "detect", label: "고/저점 탐지" },
+              { key: "detect", label: "지지/저항" },
+              { key: "indicator", label: "분석" },
             ].map(({ key, label }) => (
               <button
                 key={key}
@@ -928,6 +942,9 @@ export default function ChartDetail() {
                 timeframe={timeframe}
                 onPointsSelected={handleDetectPoints}
               />
+            )}
+            {mobileTab === "indicator" && (
+              <IndicatorPanel code={code} market={market} timeframe={timeframe} />
             )}
           </div>
         </>
