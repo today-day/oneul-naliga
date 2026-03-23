@@ -167,6 +167,26 @@ export default function AddLineModal({
                 color: "var(--color-text-primary)", background: "var(--color-background-secondary)",
               }}
             />
+            {!isTrend && (
+              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                {["평단가", "목표가", "손절가"].map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setLineName(name)}
+                    style={{
+                      padding: "4px 10px", fontSize: 11, borderRadius: 6, cursor: "pointer",
+                      border: lineName === name ? "1.5px solid var(--color-text-info)" : `1px solid var(--color-border-primary)`,
+                      background: lineName === name ? "rgba(59,130,246,0.1)" : "var(--color-background-secondary)",
+                      color: lineName === name ? "var(--color-text-info)" : "var(--color-text-secondary)",
+                      fontWeight: lineName === name ? 600 : 400,
+                    }}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 색상 선택 */}
