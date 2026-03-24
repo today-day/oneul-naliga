@@ -30,11 +30,15 @@ export const searchStocks = (q) =>
 export const getRanking = (type = "view") =>
   fetch(`${BASE}/stocks/ranking?type=${type}`).then((r) => {
     if (r.status === 503) throw Object.assign(new Error("maintenance"), { maintenance: true });
-    return r.json();
+    if (!r.ok) return [];
+    return r.json().then((d) => Array.isArray(d) ? d : []);
   });
 
 export const getOverseasRanking = (type = "rise", exchange = "NAS") =>
-  fetch(`${BASE}/stocks/ranking/overseas?type=${type}&exchange=${exchange}`).then((r) => r.json());
+  fetch(`${BASE}/stocks/ranking/overseas?type=${type}&exchange=${exchange}`).then((r) => {
+    if (!r.ok) return [];
+    return r.json().then((d) => Array.isArray(d) ? d : []);
+  });
 
 export const getIndexCandles = (code, period = "D", count = 200) =>
   fetch(`${BASE}/stocks/indices/candles?code=${encodeURIComponent(code)}&period=${period}&count=${count}`).then((r) => r.json());

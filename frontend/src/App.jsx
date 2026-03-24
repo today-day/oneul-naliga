@@ -12,7 +12,7 @@ import Settings from "./pages/Settings";
 import Watchlist from "./pages/Watchlist";
 import SplashScreen from "./components/SplashScreen";
 import WhatsNewModal, { shouldShowWhatsNew } from "./components/WhatsNewModal";
-import { useAlertCount, AlertCountProvider } from "./hooks/useAlertCount";
+import { useAlertCount, AlertCountProvider } from "./hooks/useAlertCount.jsx";
 import { getIndices, getFX } from "./api/stocks";
 import { prefetchCache } from "./prefetchCache";
 import SearchOverlay from "./components/SearchOverlay";

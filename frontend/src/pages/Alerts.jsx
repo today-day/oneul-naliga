@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAlerts, deleteAlert } from "../api/alerts";
 import { useAuth } from "../context/AuthContext";
-import { useAlertRefresh } from "../hooks/useAlertCount";
+import { useAlertRefresh } from "../hooks/useAlertCount.jsx";
 
 function timeAgo(isoStr) {
   const diff = (Date.now() - new Date(isoStr)) / 1000;
