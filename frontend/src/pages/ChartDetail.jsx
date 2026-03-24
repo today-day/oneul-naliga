@@ -98,6 +98,7 @@ export default function ChartDetail() {
   const [mobileTab, setMobileTab] = useState("lines"); // "lines" | "detect" | "orderbook"
   const [showOrderbookLines, setShowOrderbookLines] = useState(true);
   const [editingLine, setEditingLine] = useState(null);
+  const [hiddenLines, setHiddenLines] = useState(new Set());
   const [showMinuteDropdown, setShowMinuteDropdown] = useState(false);
   const [chartReady, setChartReady] = useState(0);
   const [stockName, setStockName] = useState(location.state?.name || "");
@@ -437,7 +438,7 @@ export default function ChartDetail() {
     Object.values(trendSeriesMap.current).forEach((s) => { try { chart.removeSeries(s); } catch { } });
     trendSeriesMap.current = {};
 
-    lines.forEach((line) => {
+    lines.filter((line) => !hiddenLines.has(line.id)).forEach((line) => {
       const color = line.color || lineColor(line.signal_type);
       if (line.line_type === "horizontal" && line.price) {
         const pl = cs.createPriceLine({ price: line.price, color, lineWidth: 1.5, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: line.name || "" });
@@ -504,7 +505,7 @@ export default function ChartDetail() {
     if (savedRange) {
       chart.timeScale().setVisibleLogicalRange(savedRange);
     }
-  }, [lines, candles, chartReady]);
+  }, [lines, candles, chartReady, hiddenLines]);
 
   // ── 호가 기반 지지/저항선 차트 표시 ─────────
 
@@ -758,13 +759,38 @@ export default function ChartDetail() {
           const target = line.line_type === "horizontal" ? line.price : line.y2;
           const dist = target && displayPrice ? ((displayPrice - target) / target * 100).toFixed(2) : null;
           return (
-            <div key={line.id} onClick={() => scrollToLine(line)} style={{ padding: "14px 20px", borderBottom: i < lines.length - 1 ? B : "none", cursor: "pointer" }}>
+            <div key={line.id} onClick={() => scrollToLine(line)} style={{ padding: "14px 20px", borderBottom: i < lines.length - 1 ? B : "none", cursor: "pointer", opacity: hiddenLines.has(line.id) ? 0.4 : 1, transition: "opacity 0.2s" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ width: 14, height: 2.5, background: color, borderRadius: 1 }} />
                   <span style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)" }}>{line.name || "이름 없음"}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setHiddenLines((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(line.id)) next.delete(line.id); else next.add(line.id);
+                        return next;
+                      });
+                    }}
+                    style={{ border: "none", background: "none", cursor: "pointer", padding: "4px 6px", color: hiddenLines.has(line.id) ? "var(--color-text-quaternary)" : "var(--color-text-tertiary)", lineHeight: 0 }}
+                  >
+                    {hiddenLines.has(line.id) ? (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" />
+                        <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" />
+                        <path d="M14.12 14.12a3 3 0 11-4.24-4.24" />
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                      </svg>
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    )}
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingLine(line); }}
                     style={{ border: "none", background: "none", cursor: "pointer", padding: "4px 6px", color: "var(--color-text-tertiary)", lineHeight: 0 }}
@@ -1237,6 +1263,7 @@ export default function ChartDetail() {
           line={editingLine}
           onClose={() => setEditingLine(null)}
           onSave={handleUpdateLine}
+          currentPrice={displayPrice || null}
         />
       )}
 

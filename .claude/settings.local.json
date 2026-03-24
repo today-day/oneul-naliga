@@ -55,7 +55,9 @@
       "Bash(grep -r \"WS_URL\\\\|new WebSocket\" /c/oneul-naliga/frontend/src/ --include=*.jsx -l)",
       "Bash(.venv/Scripts/python.exe -c \"from app.main import app; print\\('main OK'\\)\" 2>&1)",
       "Bash(.venv/Scripts/python.exe -c \"from app.routers.stocks import router; print\\('stocks router OK'\\)\" 2>&1)",
-      "Bash(.venv/Scripts/python.exe -c \"\nimport asyncio\nfrom app.services.kiwoom import _call_etf\n\nasync def test\\(\\):\n    data = await _call_etf\\('ka40002', {'stk_cd': '005930'}\\)\n    print\\(data\\)\n\nasyncio.run\\(test\\(\\)\\)\n\")"
+      "Bash(.venv/Scripts/python.exe -c \"\nimport asyncio\nfrom app.services.kiwoom import _call_etf\n\nasync def test\\(\\):\n    data = await _call_etf\\('ka40002', {'stk_cd': '005930'}\\)\n    print\\(data\\)\n\nasyncio.run\\(test\\(\\)\\)\n\")",
+      "Bash(find /c/Users/choiy/Desktop/oneul-naliga/frontend -name *.jsx -o -name *.tsx)",
+      "Bash(find /c/Users/choiy/Desktop/oneul-naliga/backend -maxdepth 2 -name *.py -type f)"
     ]
   }
 }

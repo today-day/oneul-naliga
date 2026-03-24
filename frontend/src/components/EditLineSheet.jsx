@@ -5,11 +5,12 @@ const SENSITIVITY_LABELS = ["±0.3%", "±0.5%", "±0.7%", "±1.0%", "±1.5%"];
 const SENSITIVITY_VALUES = [0.3, 0.5, 0.7, 1.0, 1.5];
 const COLOR_PRESETS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#6b7280"];
 
-export default function EditLineSheet({ line, onClose, onSave }) {
+export default function EditLineSheet({ line, onClose, onSave, currentPrice }) {
   const [name, setName] = useState(line.name || "");
   const [selectedColor, setSelectedColor] = useState(line.color || "#ef4444");
   const initialIdx = SENSITIVITY_VALUES.findIndex((v) => v === line.sensitivity) ?? 1;
   const [sensitivityIdx, setSensitivityIdx] = useState(initialIdx >= 0 ? initialIdx : 1);
+  const [price, setPrice] = useState(line.line_type === "horizontal" ? line.price : null);
 
   const sheetRef = useRef(null);
   const startY = useRef(0);
@@ -33,11 +34,18 @@ export default function EditLineSheet({ line, onClose, onSave }) {
   };
 
   const handleSave = () => {
-    onSave(line.id, {
+    const updates = {
       name: name || line.name,
       color: selectedColor,
       sensitivity: SENSITIVITY_VALUES[sensitivityIdx],
-    });
+    };
+    if (line.line_type === "horizontal" && price != null) {
+      updates.price = Number(price);
+      if (currentPrice) {
+        updates.signal_type = Number(price) <= currentPrice ? "loss" : "attack";
+      }
+    }
+    onSave(line.id, updates);
   };
 
   const target = line.line_type === "horizontal" ? line.price : line.y2;
@@ -80,6 +88,25 @@ export default function EditLineSheet({ line, onClose, onSave }) {
         </div>
 
         <div style={{ padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* 가격 (수평선만) */}
+          {line.line_type === "horizontal" && (
+            <div>
+              <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 8 }}>가격</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={price ?? ""}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="가격 입력"
+                style={{
+                  width: "100%", fontSize: 14, padding: "11px 14px", border: B,
+                  borderRadius: 10, outline: "none", boxSizing: "border-box",
+                  color: "var(--color-text-primary)", background: "var(--color-background-secondary)",
+                }}
+              />
+            </div>
+          )}
 
           {/* 이름 */}
           <div>

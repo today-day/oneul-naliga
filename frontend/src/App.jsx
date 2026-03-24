@@ -12,7 +12,7 @@ import Settings from "./pages/Settings";
 import Watchlist from "./pages/Watchlist";
 import SplashScreen from "./components/SplashScreen";
 import WhatsNewModal, { shouldShowWhatsNew } from "./components/WhatsNewModal";
-import { useAlertCount } from "./hooks/useAlertCount";
+import { useAlertCount, AlertCountProvider } from "./hooks/useAlertCount";
 import { getIndices, getFX } from "./api/stocks";
 import { prefetchCache } from "./prefetchCache";
 import SearchOverlay from "./components/SearchOverlay";
@@ -370,7 +370,9 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <AppWithSplash />
+      <AlertCountProvider>
+        <AppWithSplash />
+      </AlertCountProvider>
     </AuthProvider>
   );
 }

@@ -41,3 +41,5 @@ class LineUpdate(BaseModel):
     color: Optional[str] = None
     sensitivity: Optional[float] = None
     is_active: Optional[bool] = None
+    price: Optional[float] = None
+    signal_type: Optional[Literal["attack", "loss"]] = None

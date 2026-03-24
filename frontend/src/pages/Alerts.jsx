@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAlerts, deleteAlert } from "../api/alerts";
 import { useAuth } from "../context/AuthContext";
+import { useAlertRefresh } from "../hooks/useAlertCount";
 
 function timeAgo(isoStr) {
   const diff = (Date.now() - new Date(isoStr)) / 1000;
@@ -19,6 +20,7 @@ function formatDate(isoStr) {
 export default function Alerts() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const refreshAlertCount = useAlertRefresh();
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // "all" | "attack" | "loss"
@@ -33,11 +35,13 @@ export default function Alerts() {
   const handleDelete = async (id) => {
     await deleteAlert(id, user?.id).catch(() => {});
     setAlerts((prev) => prev.filter((a) => a.id !== id));
+    refreshAlertCount();
   };
 
   const handleClearAll = async () => {
     await Promise.all(alerts.map((a) => deleteAlert(a.id, user?.id).catch(() => {})));
     setAlerts([]);
+    refreshAlertCount();
   };
 
   const filtered = filter === "all" ? alerts : alerts.filter((a) => a.signal_type === filter);
