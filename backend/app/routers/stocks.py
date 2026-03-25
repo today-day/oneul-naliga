@@ -99,69 +99,67 @@ async def get_domestic_index_info(inds_cd: str = Query(...), mrkt_tp: str = Quer
         raise HTTPException(status_code=502, detail=str(e))
 
 
+_RANKING_TYPES = ["view", "volume", "amount", "surge", "rise", "fall", "foreign", "institution", "etf"]
+_ranking_cache: dict[str, list] = {}
+
+
+async def _refresh_all_rankings():
+    """모든 랭킹 타입을 순차 갱신 (백그라운드 태스크)"""
+    import asyncio
+    while True:
+        for rt in _RANKING_TYPES:
+            try:
+                data = await kiwoom.get_ranking(rt)
+                _ranking_cache[rt] = data
+            except Exception as e:
+                print(f"[ranking] {rt} 백그라운드 갱신 실패: {e}")
+            await asyncio.sleep(0.5)  # 호출 간 간격 (초당 2건)
+        await asyncio.sleep(30)
+
+
 @router.get("/ranking")
 async def get_ranking(type: str = Query(default="view")):
-    """인기종목 랭킹 조회 (type: view|volume|amount|surge|rise|fall|foreign|institution|etf)"""
-    cache_key = f"ranking_{type}"
+    """인기종목 랭킹 조회 — 캐시 즉시 반환"""
+    if type in _ranking_cache:
+        return _ranking_cache[type]
+    # 캐시 없으면 직접 호출 (서버 시작 직후)
     try:
         data = await kiwoom.get_ranking(type)
-        _cache[cache_key] = data
+        _ranking_cache[type] = data
         return data
-    except KiwoomMaintenanceError as e:
-        if cache_key in _cache:
-            print(f"[ranking] 🔧 점검 중 → 캐시 반환")
-            return _cache[cache_key]
+    except KiwoomMaintenanceError:
         raise HTTPException(status_code=503, detail="키움 API 점검 중입니다.")
     except Exception as e:
-        if cache_key in _cache:
-            print(f"[ranking] API 실패 → 캐시 반환: {e}")
-            return _cache[cache_key]
         raise HTTPException(status_code=502, detail=str(e))
 
 
-@router.get("/indices")
-async def get_indices():
-    """KOSPI / KOSDAQ + 미국 지수 조회"""
-    results = []
-    errors = []  # 실패한 서비스 목록
-    kr_ok = False
-
-    # 국내 지수 (키움)
+@router.get("/indices/kr")
+async def get_indices_kr():
+    """국내 지수 조회 (KOSPI / KOSDAQ)"""
     try:
         kr = await kiwoom.get_indices()
-        results.extend(kr)
-        kr_ok = True
+        _cache["indices_kr"] = kr
+        return {"data": kr, "error": None}
     except KiwoomMaintenanceError:
-        print(f"[indices] 🔧 키움 점검 중 → 캐시 반환")
-        errors.append("kiwoom")
-        if "indices_kr" in _cache:
-            results.extend(_cache["indices_kr"])
+        print(f"[indices] 키움 점검 중 → 캐시 반환")
+        return {"data": _cache.get("indices_kr", []), "error": "kiwoom"}
     except Exception as e:
         print(f"[indices] 키움 국내 지수 조회 실패: {e}")
-        errors.append("kiwoom")
-        if "indices_kr" in _cache:
-            results.extend(_cache["indices_kr"])
+        return {"data": _cache.get("indices_kr", []), "error": "kiwoom"}
 
-    # 미국 지수 (KIS)
-    us_ok = False
-    if settings.kis_app_key and settings.kis_app_secret:
-        try:
-            us = await kis.get_us_indices()
-            results.extend(us)
-            us_ok = True
-        except Exception as e:
-            print(f"[indices] KIS 미국 지수 조회 실패: {e}")
-            errors.append("kis")
-            if "indices_us" in _cache:
-                results.extend(_cache["indices_us"])
 
-    # 성공한 데이터만 캐시 갱신
-    if kr_ok:
-        _cache["indices_kr"] = [r for r in results if r.get("name") in ("KOSPI", "KOSDAQ")]
-    if us_ok:
-        _cache["indices_us"] = [r for r in results if r.get("name") not in ("KOSPI", "KOSDAQ")]
-
-    return {"data": results, "errors": errors}
+@router.get("/indices/us")
+async def get_indices_us():
+    """미국 지수 조회 (DOW / NASDAQ / SP500)"""
+    if not settings.kis_app_key or not settings.kis_app_secret:
+        return {"data": [], "error": None}
+    try:
+        us = await kis.get_us_indices()
+        _cache["indices_us"] = us
+        return {"data": us, "error": None}
+    except Exception as e:
+        print(f"[indices] KIS 미국 지수 조회 실패: {e}")
+        return {"data": _cache.get("indices_us", []), "error": "kis"}
 
 
 _fx_cache: dict = {"data": None, "expires_at": 0.0}
@@ -187,10 +185,11 @@ async def get_fx():
 
     # Fallback: open.er-api.com
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get("https://open.er-api.com/v6/latest/USD")
-            r.raise_for_status()
-            data = r.json()
+        from app.services.http_client import get_client
+        client = get_client()
+        r = await client.get("https://open.er-api.com/v6/latest/USD")
+        r.raise_for_status()
+        data = r.json()
 
         rates = data.get("rates", {})
         krw = rates.get("KRW", 1)

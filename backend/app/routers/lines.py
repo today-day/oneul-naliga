@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from app.models.line import LineCreate, LineUpdate
 from app.database import get_supabase
+from app.services.monitor import invalidate_lines_cache
 
 router = APIRouter(prefix="/lines", tags=["lines"])
 
@@ -19,6 +20,7 @@ async def create_line(line: LineCreate):
         result = db.table("lines").insert(data).execute()
     if not result.data:
         raise HTTPException(status_code=500, detail="선 저장 실패")
+    invalidate_lines_cache()
     return result.data[0]
 
 
@@ -48,6 +50,7 @@ async def update_line(line_id: str, body: LineUpdate):
     result = db.table("lines").update(updates).eq("id", line_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="선을 찾을 수 없습니다")
+    invalidate_lines_cache()
     return result.data[0]
 
 
@@ -56,4 +59,5 @@ async def delete_line(line_id: str):
     """선 삭제"""
     db = get_supabase()
     db.table("lines").delete().eq("id", line_id).execute()
+    invalidate_lines_cache()
     return {"deleted": line_id}

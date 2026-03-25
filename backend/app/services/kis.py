@@ -10,11 +10,69 @@ import httpx
 from datetime import datetime
 from app.config import settings
 from app.models.stock import StockCandle
+from app.services.http_client import get_client
 
 BASE_URL = "https://openapi.koreainvestment.com:9443"
 
 _token_cache: dict = {}
 _token_lock: asyncio.Lock | None = None
+
+# --- 동일 요청 중복 호출 방지 (in-flight dedup) ---
+_inflight: dict[str, asyncio.Future] = {}
+_inflight_lock: asyncio.Lock | None = None
+
+
+def _get_inflight_lock() -> asyncio.Lock:
+    global _inflight_lock
+    if _inflight_lock is None:
+        _inflight_lock = asyncio.Lock()
+    return _inflight_lock
+
+
+async def _dedup_call(key: str, coro_fn):
+    """같은 key의 요청이 이미 진행 중이면 그 결과를 공유, 아니면 새로 호출"""
+    async with _get_inflight_lock():
+        if key in _inflight:
+            existing_fut = _inflight[key]
+        else:
+            existing_fut = None
+            fut = asyncio.get_event_loop().create_future()
+            _inflight[key] = fut
+
+    # lock 밖에서 await (데드락 방지)
+    if existing_fut is not None:
+        try:
+            return await asyncio.shield(existing_fut)
+        except (asyncio.CancelledError, Exception):
+            # 원본 요청이 실패하면 대기자도 직접 호출
+            return await coro_fn()
+
+    try:
+        result = await coro_fn()
+        if not fut.done():
+            fut.set_result(result)
+        return result
+    except Exception as e:
+        if not fut.done():
+            fut.set_result(None)
+        raise
+    finally:
+        async with _get_inflight_lock():
+            _inflight.pop(key, None)
+
+
+async def _retry_request(request_fn, max_retries: int = 3, label: str = ""):
+    """500 에러 시 exponential backoff로 재시도"""
+    for attempt in range(max_retries):
+        try:
+            return await request_fn()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code >= 500 and attempt < max_retries - 1:
+                wait = 1.0 * (2 ** attempt)
+                print(f"[kis] {label} 500 에러, {wait}초 후 재시도 ({attempt + 1}/{max_retries})")
+                await asyncio.sleep(wait)
+                continue
+            raise
 
 
 def _get_token_lock() -> asyncio.Lock:
@@ -71,17 +129,17 @@ async def get_access_token() -> str:
         if _token_cache.get("token"):
             await revoke_token()
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{BASE_URL}/oauth2/token",
-                data={
-                    "grant_type": "client_credentials",
-                    "appkey": settings.kis_app_key,
-                    "appsecret": settings.kis_app_secret,
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_client()
+        resp = await client.post(
+            f"{BASE_URL}/oauth2/token",
+            data={
+                "grant_type": "client_credentials",
+                "appkey": settings.kis_app_key,
+                "appsecret": settings.kis_app_secret,
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
         _token_cache["token"] = data["access_token"]
         now = datetime.now().timestamp()
@@ -97,15 +155,16 @@ async def revoke_token() -> None:
     if not token:
         return
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
-                f"{BASE_URL}/oauth2/revokeP",
-                json={
-                    "appkey": settings.kis_app_key,
-                    "appsecret": settings.kis_app_secret,
-                    "token": token,
-                },
-            )
+        client = get_client()
+        await client.post(
+            f"{BASE_URL}/oauth2/revokeP",
+            timeout=5.0,
+            json={
+                "appkey": settings.kis_app_key,
+                "appsecret": settings.kis_app_secret,
+                "token": token,
+            },
+        )
     except Exception as e:
         print(f"[kis] 토큰 폐기 실패: {e}")
     _token_cache.clear()
@@ -123,26 +182,26 @@ async def _get_period_candles(symbol: str, exchange: str, gubn: str, count: int)
     max_pages = 10
 
     for page in range(max_pages):
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{BASE_URL}/uapi/overseas-price/v1/quotations/dailyprice",
-                headers={
-                    "authorization": f"Bearer {token}",
-                    "appkey": settings.kis_app_key,
-                    "appsecret": settings.kis_app_secret,
-                    "tr_id": "HHDFS76240000",
-                },
-                params={
-                    "AUTH": "",
-                    "EXCD": exchange,
-                    "SYMB": symbol,
-                    "GUBN": gubn,
-                    "BYMD": bymd,
-                    "MODP": "1",
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_client()
+        resp = await client.get(
+            f"{BASE_URL}/uapi/overseas-price/v1/quotations/dailyprice",
+            headers={
+                "authorization": f"Bearer {token}",
+                "appkey": settings.kis_app_key,
+                "appsecret": settings.kis_app_secret,
+                "tr_id": "HHDFS76240000",
+            },
+            params={
+                "AUTH": "",
+                "EXCD": exchange,
+                "SYMB": symbol,
+                "GUBN": gubn,
+                "BYMD": bymd,
+                "MODP": "1",
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
         rows = data.get("output2", [])
         if not rows:
@@ -205,31 +264,31 @@ async def get_minute_candles(symbol: str, interval: int = 60, count: int = 300, 
     """미국 주식 분봉 조회 (HHDFS76950200)"""
     token = await get_access_token()
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(
-            f"{BASE_URL}/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice",
-            headers={
-                "content-type": "application/json; charset=utf-8",
-                "authorization": f"Bearer {token}",
-                "appkey": settings.kis_app_key,
-                "appsecret": settings.kis_app_secret,
-                "tr_id": "HHDFS76950200",
-                "custtype": "P",
-            },
-            params={
-                "AUTH": "",
-                "EXCD": exchange,
-                "SYMB": symbol,
-                "NMIN": str(interval),
-                "PINC": "1",
-                "NEXT": "",
-                "NREC": str(min(count, 120)),
-                "FILL": "",
-                "KEYB": "",
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    client = get_client()
+    resp = await client.get(
+        f"{BASE_URL}/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice",
+        headers={
+            "content-type": "application/json; charset=utf-8",
+            "authorization": f"Bearer {token}",
+            "appkey": settings.kis_app_key,
+            "appsecret": settings.kis_app_secret,
+            "tr_id": "HHDFS76950200",
+            "custtype": "P",
+        },
+        params={
+            "AUTH": "",
+            "EXCD": exchange,
+            "SYMB": symbol,
+            "NMIN": str(interval),
+            "PINC": "1",
+            "NEXT": "",
+            "NREC": str(min(count, 120)),
+            "FILL": "",
+            "KEYB": "",
+        },
+    )
+    resp.raise_for_status()
+    data = resp.json()
 
     candles = []
     for item in data.get("output2", [])[:count]:
@@ -251,28 +310,28 @@ async def get_us_orderbook(symbol: str, exchange: str = "NAS") -> dict:
     """해외주식 현재가 호가 조회 (HHDFS76200100) — 미국 10호가, 기타 1호가"""
     token = await get_access_token()
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(
-            f"{BASE_URL}/uapi/overseas-price/v1/quotations/inquire-asking-price",
-            headers={
-                "content-type": "application/json; charset=utf-8",
-                "authorization": f"Bearer {token}",
-                "appkey": settings.kis_app_key,
-                "appsecret": settings.kis_app_secret,
-                "tr_id": "HHDFS76200100",
-                "custtype": "P",
-            },
-            params={
-                "AUTH": "",
-                "EXCD": exchange,
-                "SYMB": symbol,
-            },
-        )
-        if not resp.is_success:
-            body = resp.text[:300]
-            print(f"[kis] get_us_orderbook 오류: {resp.status_code} {body}")
-            resp.raise_for_status()
-        data = resp.json()
+    client = get_client()
+    resp = await client.get(
+        f"{BASE_URL}/uapi/overseas-price/v1/quotations/inquire-asking-price",
+        headers={
+            "content-type": "application/json; charset=utf-8",
+            "authorization": f"Bearer {token}",
+            "appkey": settings.kis_app_key,
+            "appsecret": settings.kis_app_secret,
+            "tr_id": "HHDFS76200100",
+            "custtype": "P",
+        },
+        params={
+            "AUTH": "",
+            "EXCD": exchange,
+            "SYMB": symbol,
+        },
+    )
+    if not resp.is_success:
+        body = resp.text[:300]
+        print(f"[kis] get_us_orderbook 오류: {resp.status_code} {body}")
+        resp.raise_for_status()
+    data = resp.json()
 
     rt_cd = str(data.get("rt_cd", ""))
     if rt_cd != "0":
@@ -318,23 +377,23 @@ async def get_current_price(symbol: str, exchange: str = "NAS") -> float:
     """미국 주식 현재가 조회"""
     token = await get_access_token()
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{BASE_URL}/uapi/overseas-price/v1/quotations/price",
-            headers={
-                "authorization": f"Bearer {token}",
-                "appkey": settings.kis_app_key,
-                "appsecret": settings.kis_app_secret,
-                "tr_id": "HHDFS00000300",
-            },
-            params={
-                "AUTH": "",
-                "EXCD": exchange,
-                "SYMB": symbol,
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    client = get_client()
+    resp = await client.get(
+        f"{BASE_URL}/uapi/overseas-price/v1/quotations/price",
+        headers={
+            "authorization": f"Bearer {token}",
+            "appkey": settings.kis_app_key,
+            "appsecret": settings.kis_app_secret,
+            "tr_id": "HHDFS00000300",
+        },
+        params={
+            "AUTH": "",
+            "EXCD": exchange,
+            "SYMB": symbol,
+        },
+    )
+    resp.raise_for_status()
+    data = resp.json()
 
     output = data["output"]
     return {
@@ -342,6 +401,36 @@ async def get_current_price(symbol: str, exchange: str = "NAS") -> float:
         "change_pct": output.get("rate", "0.00"),
         "change_amt": abs(float(output.get("diff", "0") or "0")),
     }
+
+
+async def _fetch_chartprice(token: str, mrkt_code: str, iscd: str, date: str, label: str) -> dict:
+    """inquire-daily-chartprice 공통 호출 (retry + dedup 적용)"""
+    dedup_key = f"chartprice:{mrkt_code}:{iscd}:{date}"
+
+    async def _do_request():
+        async def _single():
+            client = get_client()
+            resp = await client.get(
+                f"{BASE_URL}/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
+                headers={
+                    "authorization": f"Bearer {token}",
+                    "appkey": settings.kis_app_key,
+                    "appsecret": settings.kis_app_secret,
+                    "tr_id": "FHKST03030100",
+                },
+                params={
+                    "FID_COND_MRKT_DIV_CODE": mrkt_code,
+                    "FID_INPUT_ISCD": iscd,
+                    "FID_INPUT_DATE_1": date,
+                    "FID_INPUT_DATE_2": date,
+                    "FID_PERIOD_DIV_CODE": "D",
+                },
+            )
+            resp.raise_for_status()
+            return resp.json()
+        return await _retry_request(_single, max_retries=3, label=label)
+
+    return await _dedup_call(dedup_key, _do_request)
 
 
 async def get_fx_rates() -> list[dict]:
@@ -363,25 +452,7 @@ async def get_fx_rates() -> list[dict]:
 
     for fx in fx_codes:
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(
-                    f"{BASE_URL}/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
-                    headers={
-                        "authorization": f"Bearer {token}",
-                        "appkey": settings.kis_app_key,
-                        "appsecret": settings.kis_app_secret,
-                        "tr_id": "FHKST03030100",
-                    },
-                    params={
-                        "FID_COND_MRKT_DIV_CODE": "X",
-                        "FID_INPUT_ISCD": fx["code"],
-                        "FID_INPUT_DATE_1": today,
-                        "FID_INPUT_DATE_2": today,
-                        "FID_PERIOD_DIV_CODE": "D",
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
+            data = await _fetch_chartprice(token, "X", fx["code"], today, f"환율 {fx['pair']}")
 
             output1 = data.get("output1", {})
             raw_price = float(output1.get("ovrs_nmix_prpr", "0"))
@@ -418,25 +489,32 @@ async def get_index_candles(code: str, period: str = "D", count: int = 200) -> l
     from datetime import timedelta
     start = (datetime.now() - timedelta(days=365 * 10)).strftime("%Y%m%d")
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(
-            f"{BASE_URL}/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
-            headers={
-                "authorization": f"Bearer {token}",
-                "appkey": settings.kis_app_key,
-                "appsecret": settings.kis_app_secret,
-                "tr_id": "FHKST03030100",
-            },
-            params={
-                "FID_COND_MRKT_DIV_CODE": "N",
-                "FID_INPUT_ISCD": code,
-                "FID_INPUT_DATE_1": start,
-                "FID_INPUT_DATE_2": today,
-                "FID_PERIOD_DIV_CODE": period,
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    dedup_key = f"index_candles:{code}:{period}:{start}:{today}"
+
+    async def _do_request():
+        async def _single():
+            client = get_client()
+            resp = await client.get(
+                f"{BASE_URL}/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
+                headers={
+                    "authorization": f"Bearer {token}",
+                    "appkey": settings.kis_app_key,
+                    "appsecret": settings.kis_app_secret,
+                    "tr_id": "FHKST03030100",
+                },
+                params={
+                    "FID_COND_MRKT_DIV_CODE": "N",
+                    "FID_INPUT_ISCD": code,
+                    "FID_INPUT_DATE_1": start,
+                    "FID_INPUT_DATE_2": today,
+                    "FID_PERIOD_DIV_CODE": period,
+                },
+            )
+            resp.raise_for_status()
+            return resp.json()
+        return await _retry_request(_single, max_retries=3, label=f"지수 {code}")
+
+    data = await _dedup_call(dedup_key, _do_request)
 
     output1 = data.get("output1", {})
     candles = []
@@ -482,21 +560,21 @@ async def get_overseas_ranking(rank_type: str, exchange: str = "NAS") -> list[di
     import asyncio
 
     async def _fetch_one(excd):
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{BASE_URL}{endpoint}",
-                headers={
-                    "authorization": f"Bearer {token}",
-                    "appkey": settings.kis_app_key,
-                    "appsecret": settings.kis_app_secret,
-                    "tr_id": tr_id,
-                },
-                params={"EXCD": excd, **extra_params},
-            )
-            resp.raise_for_status()
-            rows = resp.json().get("output2", [])
-            for row in rows:
-                row["_excd"] = excd  # 실제 거래소 추적
+        client = get_client()
+        resp = await client.get(
+            f"{BASE_URL}{endpoint}",
+            headers={
+                "authorization": f"Bearer {token}",
+                "appkey": settings.kis_app_key,
+                "appsecret": settings.kis_app_secret,
+                "tr_id": tr_id,
+            },
+            params={"EXCD": excd, **extra_params},
+        )
+        resp.raise_for_status()
+        rows = resp.json().get("output2", [])
+        for row in rows:
+            row["_excd"] = excd  # 실제 거래소 추적
             return rows
 
     all_rows = []
@@ -558,25 +636,7 @@ async def get_us_indices() -> list[dict]:
     results = []
     for idx in indices:
         try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(
-                    f"{BASE_URL}/uapi/overseas-price/v1/quotations/inquire-daily-chartprice",
-                    headers={
-                        "authorization": f"Bearer {token}",
-                        "appkey": settings.kis_app_key,
-                        "appsecret": settings.kis_app_secret,
-                        "tr_id": "FHKST03030100",
-                    },
-                    params={
-                        "FID_COND_MRKT_DIV_CODE": "N",
-                        "FID_INPUT_ISCD": idx["code"],
-                        "FID_INPUT_DATE_1": today,
-                        "FID_INPUT_DATE_2": today,
-                        "FID_PERIOD_DIV_CODE": "D",
-                    },
-                )
-                resp.raise_for_status()
-                data = resp.json()
+            data = await _fetch_chartprice(token, "N", idx["code"], today, f"지수 {idx['name']}")
 
             output1 = data.get("output1", {})
             if output1:

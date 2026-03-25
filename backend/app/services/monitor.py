@@ -21,6 +21,35 @@ KST = pytz.timezone("Asia/Seoul")
 REALTIME_TIMEFRAMES = {"1분", "3분", "5분", "10분", "15분", "30분", "60분"}
 DAILY_TIMEFRAMES    = {"일봉", "주봉", "월봉", "년봉"}
 
+# ─────────────────────────────────────────
+# lines 캐시 (DB 쿼리 최소화)
+# ─────────────────────────────────────────
+_lines_cache: list[dict] = []
+_lines_cache_updated: float = 0.0
+_LINES_CACHE_TTL = 30  # 30초마다 갱신
+
+
+def _refresh_lines_cache():
+    global _lines_cache, _lines_cache_updated
+    try:
+        db = get_supabase()
+        rows = db.table("lines").select("*").eq("is_active", True).execute().data
+        _lines_cache = rows or []
+        _lines_cache_updated = time.time()
+    except Exception as e:
+        print(f"[monitor] lines 캐시 갱신 실패: {e}")
+
+
+def get_cached_lines() -> list[dict]:
+    if time.time() - _lines_cache_updated > _LINES_CACHE_TTL:
+        _refresh_lines_cache()
+    return _lines_cache
+
+
+def invalidate_lines_cache():
+    global _lines_cache_updated
+    _lines_cache_updated = 0.0
+
 
 # ─────────────────────────────────────────
 # 공통: 선 vs 현재가 비교 → 알림
@@ -86,16 +115,9 @@ async def realtime_monitor() -> None:
     구독 종목이 없으면 30초마다 재확인.
     """
     while True:
-        db = get_supabase()
-        rows = (
-            db.table("lines")
-            .select("stock_code")
-            .in_("timeframe", list(REALTIME_TIMEFRAMES))
-            .eq("is_active", True)
-            .execute()
-            .data
-        )
-        codes = list({r["stock_code"] for r in rows})
+        all_lines = get_cached_lines()
+        rt_lines = [l for l in all_lines if l.get("timeframe") in REALTIME_TIMEFRAMES]
+        codes = list({l["stock_code"] for l in rt_lines})
 
         if not codes:
             print("[realtime_monitor] 분봉 선 없음. 30초 후 재확인")
@@ -103,15 +125,12 @@ async def realtime_monitor() -> None:
             continue
 
         async def on_price(stock_code: str, price: float, change_pct: str = "0.00"):
-            lines = (
-                db.table("lines")
-                .select("*")
-                .eq("stock_code", stock_code)
-                .in_("timeframe", list(REALTIME_TIMEFRAMES))
-                .eq("is_active", True)
-                .execute()
-                .data
-            )
+            lines = [
+                l for l in get_cached_lines()
+                if l["stock_code"] == stock_code
+                and l.get("timeframe") in REALTIME_TIMEFRAMES
+                and l.get("is_active")
+            ]
             for line in lines:
                 try:
                     await check_and_alert(line, price)
@@ -147,15 +166,8 @@ async def daily_monitor() -> None:
         last_run_date = today
         print(f"[daily_monitor] 장 마감 감시 시작 ({today})")
 
-        db = get_supabase()
-        lines = (
-            db.table("lines")
-            .select("*")
-            .in_("timeframe", list(DAILY_TIMEFRAMES))
-            .eq("is_active", True)
-            .execute()
-            .data
-        )
+        all_lines = get_cached_lines()
+        lines = [l for l in all_lines if l.get("timeframe") in DAILY_TIMEFRAMES]
 
         for line in lines:
             code = line["stock_code"]

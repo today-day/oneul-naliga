@@ -12,7 +12,7 @@ function useBreakpoint() {
   }, []);
   return bp;
 }
-import { getRanking, getOverseasRanking, getIndices, getFX } from "../api/stocks";
+import { getRanking, getOverseasRanking, getIndicesKR, getIndicesUS, getFX } from "../api/stocks";
 import { prefetchCache } from "../prefetchCache";
 import { MARKET_ITEMS, loadMarketSettings, saveMarketSettings } from "../config/marketItems";
 import { useAuth } from "../context/AuthContext";
@@ -335,31 +335,40 @@ export default function Home() {
     }
   };
 
-  // 지수 + 환율 로드 → 통합 marketData (프리페치 캐시 우선)
+  // 지수(국내/해외) + 환율 독립 로드 → 먼저 오는 것부터 화면에 반영
   useEffect(() => {
-    const apply = (indicesResult, fxData) => {
-      const { data: indicesData, errors } = indicesResult;
-      if (errors.length > 0 && !alreadyDismissed) setApiErrors(errors);
-      const merged = {};
-      indicesData.forEach((idx) => {
-        merged[idx.name] = { value: idx.value, change_pct: idx.change_pct, pred_pre: idx.pred_pre ?? null };
+    const merge = (incoming) => {
+      setMarketData((prev) => ({ ...prev, ...incoming }));
+    };
+
+    const applyIndices = (res, source) => {
+      if (res.error && !alreadyDismissed) setApiErrors((prev) => prev.includes(res.error) ? prev : [...prev, res.error]);
+      const m = {};
+      (res.data || []).forEach((idx) => {
+        m[idx.name] = { value: idx.value, change_pct: idx.change_pct, pred_pre: idx.pred_pre ?? null };
       });
+      merge(m);
+    };
+
+    const applyFX = (fxData) => {
+      const m = {};
       fxData.forEach((item) => {
         const currency = item.pair.split("/")[0];
-        merged[currency] = { value: item.value, unit: item.unit, change_pct: item.change_pct || null };
+        m[currency] = { value: item.value, unit: item.unit, change_pct: item.change_pct || null };
       });
-      setMarketData(merged);
+      merge(m);
     };
 
     if (prefetchCache.marketData) {
-      const { indicesResult, fxData } = prefetchCache.marketData;
-      apply(indicesResult, fxData);
+      const { krResult, usResult, fxData } = prefetchCache.marketData;
+      applyIndices(krResult, "kr");
+      applyIndices(usResult, "us");
+      applyFX(fxData);
       prefetchCache.marketData = null;
     } else {
-      Promise.all([
-        getIndices().catch(() => ({ data: [], errors: [] })),
-        getFX().catch(() => []),
-      ]).then(([indicesResult, fxData]) => apply(indicesResult, fxData));
+      getIndicesKR().catch(() => ({ data: [], error: null })).then((r) => applyIndices(r, "kr"));
+      getIndicesUS().catch(() => ({ data: [], error: null })).then((r) => applyIndices(r, "us"));
+      getFX().catch(() => []).then(applyFX);
     }
   }, []);
 

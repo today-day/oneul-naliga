@@ -51,11 +51,11 @@ export const getDomesticIndexInfo = (inds_cd, mrkt_tp = "0") =>
 
 // ── 시장 지수 ─────────────────────────────────────
 
-export const getIndices = () =>
-  fetch(`${BASE}/stocks/indices`).then((r) => r.json()).then((r) => ({
-    data: r.data ?? r,
-    errors: r.errors ?? [],
-  }));
+export const getIndicesKR = () =>
+  fetch(`${BASE}/stocks/indices/kr`).then((r) => r.json());
+
+export const getIndicesUS = () =>
+  fetch(`${BASE}/stocks/indices/us`).then((r) => r.json());
 
 // ── 환율 ───────────────────────────────────────────
 

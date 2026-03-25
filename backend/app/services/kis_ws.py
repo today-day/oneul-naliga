@@ -49,17 +49,18 @@ async def get_approval_key() -> str:
     if _approval_cache.get("key") and _approval_cache.get("expires_at", 0) > now + 300:
         return _approval_cache["key"]
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.post(
-            f"{BASE_URL}/oauth2/Approval",
-            json={
-                "grant_type": "client_credentials",
-                "appkey":     settings.kis_app_key,
-                "secretkey":  settings.kis_app_secret,
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    from app.services.http_client import get_client
+    client = get_client()
+    resp = await client.post(
+        f"{BASE_URL}/oauth2/Approval",
+        json={
+            "grant_type": "client_credentials",
+            "appkey":     settings.kis_app_key,
+            "secretkey":  settings.kis_app_secret,
+        },
+    )
+    resp.raise_for_status()
+    data = resp.json()
 
     _approval_cache["key"]        = data["approval_key"]
     _approval_cache["expires_at"] = now + 86400

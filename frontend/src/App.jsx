@@ -13,7 +13,7 @@ import Watchlist from "./pages/Watchlist";
 import SplashScreen from "./components/SplashScreen";
 import WhatsNewModal, { shouldShowWhatsNew } from "./components/WhatsNewModal";
 import { useAlertCount, AlertCountProvider } from "./hooks/useAlertCount.jsx";
-import { getIndices, getFX } from "./api/stocks";
+import { getIndicesKR, getIndicesUS, getFX } from "./api/stocks";
 import { prefetchCache } from "./prefetchCache";
 import SearchOverlay from "./components/SearchOverlay";
 import { useDarkMode } from "./hooks/useDarkMode";
@@ -336,10 +336,11 @@ function AppWithSplash() {
   // 스플래시 중 홈 데이터 프리페치
   useEffect(() => {
     Promise.all([
-      getIndices().catch(() => ({ data: [], errors: [] })),
+      getIndicesKR().catch(() => ({ data: [], error: null })),
+      getIndicesUS().catch(() => ({ data: [], error: null })),
       getFX().catch(() => []),
-    ]).then(([indicesResult, fxData]) => {
-      prefetchCache.marketData = { indicesResult, fxData };
+    ]).then(([krResult, usResult, fxData]) => {
+      prefetchCache.marketData = { krResult, usResult, fxData };
     });
   }, []);
 
