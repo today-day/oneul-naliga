@@ -202,7 +202,9 @@ def _refresh_positions_sync():
     global _position_cache, _position_cache_updated
     try:
         db = get_supabase()
-        rows = db.table("positions").select("*").eq("status", "open").execute().data
+        rows = db.table("positions").select(
+            "*, position_lines(role, line:line_id(id, price, line_type, slope, intercept))"
+        ).eq("status", "open").execute().data
         _position_cache = rows or []
         _position_cache_updated = time.time()
     except Exception as e:
@@ -224,7 +226,7 @@ def invalidate_position_cache():
 
 
 async def check_position_tp_sl(stock_code: str, current_price: float) -> None:
-    """포지션의 목표가/손절가 도달 감시"""
+    """포지션의 목표가/손절가 도달 감시 (다중 선 지원)"""
     await ensure_positions_cache()
     positions = [p for p in get_cached_positions() if p["stock_code"] == stock_code]
     if not positions:
@@ -234,28 +236,60 @@ async def check_position_tp_sl(stock_code: str, current_price: float) -> None:
     is_domestic = stock_code.isdigit() and len(stock_code) == 6
 
     for pos in positions:
-        tp = pos.get("tp_price")
-        sl = pos.get("sl_price")
         user_id = pos.get("user_id")
         price_fmt = f"{current_price:,.0f}원" if is_domestic else f"${current_price:,.2f}"
+        pls = pos.get("position_lines") or []
 
-        if tp and current_price >= tp:
+        # 목표가 수집: 수동 입력 + 연결된 tp 선 가격
+        tp_prices = []
+        if pos.get("tp_price"):
+            tp_prices.append(pos["tp_price"])
+        for pl in pls:
+            if pl["role"] == "tp" and pl.get("line") and pl["line"].get("price"):
+                tp_prices.append(pl["line"]["price"])
+
+        # 손절가 수집: 수동 입력 + 연결된 sl 선 가격
+        sl_prices = []
+        if pos.get("sl_price"):
+            sl_prices.append(pos["sl_price"])
+        for pl in pls:
+            if pl["role"] == "sl" and pl.get("line") and pl["line"].get("price"):
+                sl_prices.append(pl["line"]["price"])
+
+        # 가장 가까운 목표가부터 체크 (낮은 순)
+        hit_tp = None
+        for tp in sorted(tp_prices):
+            if current_price >= tp:
+                hit_tp = tp
+                break
+
+        if hit_tp:
+            tp_fmt = f"{hit_tp:,.0f}원" if is_domestic else f"${hit_tp:,.2f}"
             await asyncio.to_thread(lambda p=pos: db.table("positions").update({"status": "tp_hit"}).eq("id", p["id"]).execute())
             invalidate_position_cache()
             await push.broadcast(
                 user_id=user_id,
                 title=f"[{stock_code}] 목표가 도달",
-                body=f"현재가 {price_fmt} · 목표가 {tp:,.0f}" if is_domestic else f"현재가 {price_fmt} · 목표가 ${tp:,.2f}",
+                body=f"현재가 {price_fmt} · 목표가 {tp_fmt}",
                 data={"stock_code": stock_code, "signal_type": "tp_hit"},
             )
+            continue
 
-        elif sl and current_price <= sl:
+        # 가장 가까운 손절가부터 체크 (높은 순)
+        hit_sl = None
+        for sl in sorted(sl_prices, reverse=True):
+            if current_price <= sl:
+                hit_sl = sl
+                break
+
+        if hit_sl:
+            sl_fmt = f"{hit_sl:,.0f}원" if is_domestic else f"${hit_sl:,.2f}"
             await asyncio.to_thread(lambda p=pos: db.table("positions").update({"status": "sl_hit"}).eq("id", p["id"]).execute())
             invalidate_position_cache()
             await push.broadcast(
                 user_id=user_id,
                 title=f"[{stock_code}] 손절가 도달",
-                body=f"현재가 {price_fmt} · 손절가 {sl:,.0f}" if is_domestic else f"현재가 {price_fmt} · 손절가 ${sl:,.2f}",
+                body=f"현재가 {price_fmt} · 손절가 {sl_fmt}",
                 data={"stock_code": stock_code, "signal_type": "sl_hit"},
             )
 

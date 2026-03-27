@@ -23,6 +23,7 @@ const MA_CONFIG = [
   { key: "ma5", period: 5, color: "#f59e0b", label: "MA5" },
   { key: "ma20", period: 20, color: "#8b5cf6", label: "MA20" },
   { key: "ma60", period: 60, color: "#06b6d4", label: "MA60" },
+  { key: "ma120", period: 120, color: "#ec4899", label: "MA120" },
 ];
 
 // ── 유틸 ──────────────────────────────────────
@@ -91,7 +92,7 @@ export default function ChartDetail() {
   const [lines, setLines] = useState([]);
   const [currentPrice, setCurrentPrice] = useState(null);
   const [timeframe, setTimeframe] = useState("일봉");
-  const [showMA, setShowMA] = useState({ ma5: true, ma20: true, ma60: false });
+  const [showMA, setShowMA] = useState({ ma5: true, ma20: true, ma60: false, ma120: false });
   const [showIchimoku, setShowIchimoku] = useState(false);
   const ichimokuSeriesRef = useRef([]);
   const [drawMode, setDrawMode] = useState(false);
@@ -701,20 +702,21 @@ export default function ChartDetail() {
   }, [code, pendingPoints]);
 
   const handleDeleteLine = async (id) => {
-    // 이 선이 포지션의 매수 기준선이면 포지션도 삭제
-    const linkedPos = positions.find((p) => p.entry_line_id === id);
-    if (linkedPos) {
+    // position_lines 기반: 이 선이 연결된 포지션 찾기
+    const affected = positions.filter((p) =>
+      (p.position_lines || []).some((pl) => pl.line?.id === id)
+    );
+    if (affected.length > 0) {
       const { deletePosition } = await import("../api/positions");
-      await deletePosition(linkedPos.id).catch(() => {});
+      for (const pos of affected) {
+        const entryLines = (pos.position_lines || []).filter(pl => pl.role === "entry");
+        const isLastEntry = entryLines.length <= 1 && entryLines.some(pl => pl.line?.id === id);
+        if (isLastEntry) {
+          await deletePosition(pos.id).catch(() => {});
+        }
+        // tp/sl 선 삭제는 DB CASCADE가 position_lines를 정리
+      }
       loadPositions();
-    } else {
-      // 매도/손절 기준선이면 연결만 해제
-      const tpPos = positions.find((p) => p.tp_line_id === id);
-      const slPos = positions.find((p) => p.sl_line_id === id);
-      const { updatePosition } = await import("../api/positions");
-      if (tpPos) await updatePosition(tpPos.id, { tp_line_id: null, tp_price: null }).catch(() => {});
-      if (slPos) await updatePosition(slPos.id, { sl_line_id: null, sl_price: null }).catch(() => {});
-      if (tpPos || slPos) loadPositions();
     }
     try { await deleteLine(id); } catch { }
     setLines((prev) => prev.filter((l) => l.id !== id));
@@ -763,7 +765,7 @@ export default function ChartDetail() {
   const prevClose = candles.at(-2)?.close;
   const displayPrice = livePrice ?? currentPrice ?? lastClose ?? 0;
   const priceChange = prevClose ? displayPrice - prevClose : 0;
-  const pctChange = liveChangePct != null ? String(liveChangePct).replace(/^\+/, "") : (prevClose ? ((priceChange / prevClose) * 100).toFixed(2) : "0.00");
+  const pctChange = liveChangePct != null ? String(liveChangePct).replace(/^[+-]/, "") : (prevClose ? (Math.abs(priceChange / prevClose) * 100).toFixed(2) : "0.00");
 
   // ── 렌더: 선 목록 ──────────────────────────
 
@@ -933,13 +935,16 @@ export default function ChartDetail() {
               : null;
             const statusLabel = { open: "진행 중", closed: "종료", tp_hit: "목표 도달", sl_hit: "손절 도달" }[pos.status] || pos.status;
             const statusColor = { open: "#3b82f6", closed: "#6b7280", tp_hit: "#22c55e", sl_hit: "#ef4444" }[pos.status] || "#6b7280";
-            const entryLineName = pos.entry_line?.name || (pos.entry_line?.signal_type === "loss" ? "지지선" : "저항선");
+            const entryPLs = (pos.position_lines || []).filter(pl => pl.role === "entry" && pl.line);
+            const entryLineName = entryPLs.length > 0
+              ? entryPLs.map(pl => pl.line.name || (pl.line.signal_type === "loss" ? "지지선" : "저항선")).join(" + ")
+              : "포지션";
             return (
               <div key={pos.id} onClick={() => setEditingPosition(pos)} style={{ padding: "10px 20px", borderBottom: B, cursor: "pointer" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)" }}>
-                      {pos.entry_line ? entryLineName : "포지션"}
+                      {entryLineName}
                     </span>
                     <span style={{ fontSize: 10, fontWeight: 600, padding: "1px 8px", borderRadius: 10, background: statusColor + "22", color: statusColor }}>{statusLabel}</span>
                   </div>
@@ -1013,7 +1018,7 @@ export default function ChartDetail() {
                 {isDomestic ? displayPrice.toLocaleString() + "원" : "$" + displayPrice.toLocaleString()}
               </p>
               <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: priceChange >= 0 ? "var(--color-rise)" : "var(--color-fall)" }}>
-                {priceChange >= 0 ? "▲" : "▼"}{Math.abs(priceChange).toLocaleString()} ({priceChange >= 0 ? "+" : ""}{pctChange}%)
+                {priceChange >= 0 ? "▲" : "▼"}{Math.abs(priceChange).toLocaleString()} ({priceChange >= 0 ? "+" : "-"}{pctChange}%)
               </p>
             </div>
           </div>
@@ -1038,7 +1043,7 @@ export default function ChartDetail() {
             {isDomestic ? displayPrice.toLocaleString() + "원" : "$" + displayPrice.toLocaleString()}
           </span>
           <span style={{ fontSize: 15, fontWeight: 600, color: priceChange >= 0 ? "var(--color-rise)" : "var(--color-fall)" }}>
-            {priceChange >= 0 ? "▲" : "▼"}{Math.abs(priceChange).toLocaleString()} ({priceChange >= 0 ? "+" : ""}{pctChange}%)
+            {priceChange >= 0 ? "▲" : "▼"}{Math.abs(priceChange).toLocaleString()} ({priceChange >= 0 ? "+" : "-"}{pctChange}%)
           </span>
         </div>
       )}

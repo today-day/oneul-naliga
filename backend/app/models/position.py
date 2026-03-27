@@ -5,19 +5,23 @@ from typing import Optional
 class PositionCreate(BaseModel):
     stock_code: str
     user_id: Optional[str] = None
-    entry_line_id: Optional[str] = None  # 진입선 (lines.id)
-    tp_line_id: Optional[str] = None     # 목표선
-    sl_line_id: Optional[str] = None     # 손절선
+    entry_line_ids: Optional[list[str]] = None
+    tp_line_ids: Optional[list[str]] = None
+    sl_line_ids: Optional[list[str]] = None
     entry_price: Optional[float] = None
     exit_price: Optional[float] = None
     tp_price: Optional[float] = None
     sl_price: Optional[float] = None
 
 
+class PositionLineAction(BaseModel):
+    line_id: str
+    role: str  # 'entry' | 'tp' | 'sl'
+
+
 class PositionUpdate(BaseModel):
-    entry_line_id: Optional[str] = None
-    tp_line_id: Optional[str] = None
-    sl_line_id: Optional[str] = None
+    add_lines: Optional[list[PositionLineAction]] = None
+    remove_lines: Optional[list[str]] = None  # line_id 목록
     entry_price: Optional[float] = None
     exit_price: Optional[float] = None
     tp_price: Optional[float] = None

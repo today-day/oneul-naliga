@@ -37,12 +37,15 @@ export default function EditLineSheet({ line, onClose, onSave, currentPrice, pos
     if (line.id) getLineStats(line.id).then(setStats).catch(() => {});
   }, [line.id]);
 
-  // 이 선이 이미 연결된 포지션 찾기
+  // 이 선이 이미 연결된 포지션 찾기 (position_lines 기반)
   const linkedPosition = positions.find((p) =>
-    p.entry_line_id === line.id || p.tp_line_id === line.id || p.sl_line_id === line.id
+    (p.position_lines || []).some((pl) => pl.line?.id === line.id)
   );
-  const linkedRole = linkedPosition
-    ? (linkedPosition.entry_line_id === line.id ? "매수 기준선" : linkedPosition.tp_line_id === line.id ? "매도 기준선" : "손절 기준선")
+  const linkedPL = linkedPosition
+    ? (linkedPosition.position_lines || []).find((pl) => pl.line?.id === line.id)
+    : null;
+  const linkedRole = linkedPL
+    ? { entry: "매수 기준선", tp: "매도 기준선", sl: "손절 기준선" }[linkedPL.role]
     : null;
 
   const openPositions = positions.filter((p) => p.status === "open");
@@ -90,17 +93,17 @@ export default function EditLineSheet({ line, onClose, onSave, currentPrice, pos
         const priceVal = Number(intentPrice) || Number(price) || line.price;
         const entryVal = entryPriceInput ? Number(entryPriceInput) : null;
         if (intent === "buy") {
-          const body = { stock_code: stockCode, user_id: userId, entry_line_id: line.id };
+          const body = { stock_code: stockCode, user_id: userId, entry_line_ids: [line.id] };
           if (entryVal) body.entry_price = entryVal;
           if (posTarget === "new") {
             await createPosition(body);
           } else {
-            await updatePosition(posTarget, { entry_line_id: line.id, ...(entryVal ? { entry_price: entryVal } : {}) });
+            await updatePosition(posTarget, { add_lines: [{ line_id: line.id, role: "entry" }], ...(entryVal ? { entry_price: entryVal } : {}) });
           }
         } else if (intent === "sell") {
-          if (posTarget) await updatePosition(posTarget, { tp_line_id: line.id, tp_price: priceVal || null });
+          if (posTarget) await updatePosition(posTarget, { add_lines: [{ line_id: line.id, role: "tp" }], tp_price: priceVal || null });
         } else if (intent === "stop") {
-          if (posTarget) await updatePosition(posTarget, { sl_line_id: line.id, sl_price: priceVal || null });
+          if (posTarget) await updatePosition(posTarget, { add_lines: [{ line_id: line.id, role: "sl" }], sl_price: priceVal || null });
         }
         onPositionChanged?.();
       }
@@ -112,20 +115,18 @@ export default function EditLineSheet({ line, onClose, onSave, currentPrice, pos
   };
 
   const handleUnlink = async () => {
-    if (!linkedPosition) return;
-    const isEntryLine = linkedPosition.entry_line_id === line.id;
+    if (!linkedPosition || !linkedPL) return;
+    const isEntryLine = linkedPL.role === "entry";
+    const entryCount = (linkedPosition.position_lines || []).filter(pl => pl.role === "entry").length;
 
-    if (isEntryLine) {
-      // 매수 기준선 해제 → 포지션 삭제 확인
+    if (isEntryLine && entryCount <= 1) {
+      // 마지막 매수선 해제 → 포지션 삭제 확인
       if (!window.confirm("이 선을 연결 해제하면 포지션이 삭제됩니다. 계속할까요?")) return;
       const { deletePosition } = await import("../api/positions");
       await deletePosition(linkedPosition.id);
     } else {
-      // 매도/손절 기준선 해제 → 선만 해제
-      const updates = {};
-      if (linkedPosition.tp_line_id === line.id) { updates.tp_line_id = null; updates.tp_price = null; }
-      if (linkedPosition.sl_line_id === line.id) { updates.sl_line_id = null; updates.sl_price = null; }
-      await updatePosition(linkedPosition.id, updates);
+      // 선 연결만 해제
+      await updatePosition(linkedPosition.id, { remove_lines: [line.id] });
     }
     onSave(line.id, { intent: null });
     onPositionChanged?.();

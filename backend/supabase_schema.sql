@@ -79,9 +79,6 @@ CREATE TABLE IF NOT EXISTS positions (
     id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     stock_code     TEXT NOT NULL,
     user_id        TEXT,
-    entry_line_id  UUID REFERENCES lines(id) ON DELETE SET NULL,
-    tp_line_id     UUID REFERENCES lines(id) ON DELETE SET NULL,
-    sl_line_id     UUID REFERENCES lines(id) ON DELETE SET NULL,
     entry_price    DOUBLE PRECISION,
     exit_price     DOUBLE PRECISION,
     tp_price       DOUBLE PRECISION,
@@ -92,6 +89,18 @@ CREATE TABLE IF NOT EXISTS positions (
 CREATE INDEX IF NOT EXISTS idx_positions_stock  ON positions(stock_code);
 CREATE INDEX IF NOT EXISTS idx_positions_user   ON positions(user_id);
 CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status);
+
+-- 포지션-선 연결 (1:N)
+CREATE TABLE IF NOT EXISTS position_lines (
+    id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    position_id  UUID NOT NULL REFERENCES positions(id) ON DELETE CASCADE,
+    line_id      UUID NOT NULL REFERENCES lines(id) ON DELETE CASCADE,
+    role         TEXT NOT NULL CHECK (role IN ('entry', 'tp', 'sl')),
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(position_id, line_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pl_position ON position_lines(position_id);
+CREATE INDEX IF NOT EXISTS idx_pl_line ON position_lines(line_id);
 
 -- 터치 이벤트 (선 vs 가격 접촉 기록)
 CREATE TABLE IF NOT EXISTS touch_events (

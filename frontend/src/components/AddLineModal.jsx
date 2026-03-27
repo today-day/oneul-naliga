@@ -79,17 +79,17 @@ export default function AddLineModal({
         const linePrice = isTrend ? null : priceNum;
         const entryVal = entryPriceInput ? Number(entryPriceInput) : null;
         if (intent === "buy") {
-          const body = { stock_code: stockCode, user_id: userId, entry_line_id: savedLine.id };
+          const body = { stock_code: stockCode, user_id: userId, entry_line_ids: [savedLine.id] };
           if (entryVal) body.entry_price = entryVal;
           if (posTarget === "new") {
             await createPosition(body);
           } else {
-            await updatePosition(posTarget, { entry_line_id: savedLine.id, ...(entryVal ? { entry_price: entryVal } : {}) });
+            await updatePosition(posTarget, { add_lines: [{ line_id: savedLine.id, role: "entry" }], ...(entryVal ? { entry_price: entryVal } : {}) });
           }
         } else if (intent === "sell" && posTarget && posTarget !== "new") {
-          await updatePosition(posTarget, { tp_line_id: savedLine.id, tp_price: linePrice });
+          await updatePosition(posTarget, { add_lines: [{ line_id: savedLine.id, role: "tp" }], tp_price: linePrice });
         } else if (intent === "stop" && posTarget && posTarget !== "new") {
-          await updatePosition(posTarget, { sl_line_id: savedLine.id, sl_price: linePrice });
+          await updatePosition(posTarget, { add_lines: [{ line_id: savedLine.id, role: "sl" }], sl_price: linePrice });
         }
         onPositionChanged?.();
       }
@@ -101,7 +101,6 @@ export default function AddLineModal({
   };
 
   const canSave = isTrend || !!price;
-  const intentDisabled = intent && intent !== "watch" && intent !== "buy" && openPositions.length === 0;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -121,10 +120,48 @@ export default function AddLineModal({
 
         <div style={{ padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-          {/* 이 선의 의도 */}
+          {/* ── 차트 설정 ── */}
+
+          {/* 추세선 두 점 */}
+          {isTrend && pendingPoints?.length === 2 && (
+            <div style={{ background: "var(--color-background-secondary)", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {pendingPoints.map((p, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#00e676", background: "rgba(0,230,118,0.12)", borderRadius: 4, padding: "2px 6px", flexShrink: 0 }}>P{i + 1}</span>
+                  <input type="number" value={p.price} onChange={(e) => { if (!onUpdatePoints) return; const updated = [...pendingPoints]; updated[i] = { ...updated[i], price: Number(e.target.value) }; onUpdatePoints(updated); }}
+                    style={{ flex: 1, fontSize: 14, fontWeight: 600, padding: "8px 10px", border: B, borderRadius: 8, outline: "none", boxSizing: "border-box", color: "var(--color-text-primary)", background: "var(--color-background-primary)" }} />
+                </div>
+              ))}
+              <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-tertiary)" }}>클릭 위치가 부정확하면 가격을 직접 수정하세요.</p>
+            </div>
+          )}
+
+          {/* 기준 가격 (수평선) */}
+          {!isTrend && (
+            <div>
+              <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 8 }}>
+                {intent === "buy" ? "매수 타점" : intent === "sell" ? "목표가" : intent === "stop" ? "손절가" : "기준 가격"}
+              </label>
+              <div style={{ position: "relative" }}>
+                <input type="number" placeholder={currentPrice ? `현재가: ${currentPrice.toLocaleString()}` : "예: 70000"} value={price} onChange={(e) => setPrice(e.target.value)}
+                  style={{ width: "100%", fontSize: 16, fontWeight: 600, padding: "12px 14px", paddingRight: currentPrice ? 80 : 14, border: B, borderRadius: 10, outline: "none", boxSizing: "border-box", color: "var(--color-text-primary)", background: "var(--color-background-secondary)" }} />
+                {currentPrice && (
+                  <button type="button" onClick={() => setPrice(String(currentPrice))}
+                    style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", padding: "4px 10px", fontSize: 11, fontWeight: 600, borderRadius: 6, border: "none", cursor: "pointer", background: "var(--color-text-info)", color: "#fff", opacity: Number(price) === currentPrice ? 0.4 : 1 }}>
+                    현재가
+                  </button>
+                )}
+              </div>
+              <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--color-text-tertiary)" }}>
+                {intent === "buy" ? "이 가격에 수평선이 그려지고, 도달 시 알림을 받습니다." : intent === "sell" ? "이 가격에 도달하면 목표가 알림을 받습니다." : intent === "stop" ? "이 가격에 도달하면 손절 알림을 받습니다." : "차트에 수평선이 그려집니다. 현재가보다 낮으면 지지선, 높으면 저항선으로 분류됩니다."}
+              </p>
+            </div>
+          )}
+
+          {/* ── 이 선의 의도 ── */}
           <div style={{ background: "var(--color-background-secondary)", borderRadius: 10, padding: "14px 16px" }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", marginBottom: 4 }}>이 선의 의도</div>
-            <p style={{ margin: "0 0 8px", fontSize: 11, color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>이 선을 매매에 어떻게 활용할지 선택하세요. 매수 기준선을 선택하면 매매 계획이 자동으로 만들어집니다.</p>
+            <p style={{ margin: "0 0 8px", fontSize: 11, color: "var(--color-text-tertiary)", lineHeight: 1.5 }}>이 선을 매매에 어떻게 활용할지 선택하세요. 매수 기준선을 선택하면 포지션이 자동으로 만들어집니다.</p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: intent && intent !== "watch" ? 10 : 0 }}>
               {INTENTS.map(({ value, label, color }) => (
                 <button key={value} onClick={() => { setIntent(value); if (value !== "watch" && openPositions.length > 0 && value !== "buy") setPosTarget(openPositions[0].id); else setPosTarget("new"); }}
@@ -147,10 +184,20 @@ export default function AddLineModal({
                         </button>
                       ))}
                     </div>
+                    {/* 포지션 기록 */}
                     <div style={{ marginTop: 8 }}>
-                      <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", display: "block", marginBottom: 4 }}>실제 매입가 (선택)</span>
-                      <input type="number" inputMode="decimal" value={entryPriceInput} onChange={(e) => setEntryPriceInput(e.target.value)} placeholder="실제 매입가 입력 (선택)"
-                        style={{ width: "100%", fontSize: 13, padding: "9px 10px", border: B, borderRadius: 8, outline: "none", boxSizing: "border-box", color: "var(--color-text-primary)", background: "var(--color-background-primary)" }} />
+                      <span style={{ fontSize: 11, color: "var(--color-text-tertiary)", display: "block", marginBottom: 4 }}>체결가 (선택)</span>
+                      <div style={{ position: "relative" }}>
+                        <input type="number" inputMode="decimal" value={entryPriceInput} onChange={(e) => setEntryPriceInput(e.target.value)} placeholder="실제 체결 가격"
+                          style={{ width: "100%", fontSize: 13, padding: "9px 10px", paddingRight: currentPrice ? 70 : 10, border: B, borderRadius: 8, outline: "none", boxSizing: "border-box", color: "var(--color-text-primary)", background: "var(--color-background-primary)" }} />
+                        {currentPrice && (
+                          <button type="button" onClick={() => setEntryPriceInput(String(currentPrice))}
+                            style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "3px 8px", fontSize: 10, fontWeight: 600, borderRadius: 5, border: "none", cursor: "pointer", background: "var(--color-text-info)", color: "#fff", opacity: Number(entryPriceInput) === currentPrice ? 0.4 : 1 }}>
+                            현재가
+                          </button>
+                        )}
+                      </div>
+                      <p style={{ margin: "4px 0 0", fontSize: 10, color: "var(--color-text-quaternary)" }}>수익률 계산의 기준이 됩니다</p>
                     </div>
                   </div>
                 ) : openPositions.length > 0 ? (
@@ -165,35 +212,11 @@ export default function AddLineModal({
                     </div>
                   </div>
                 ) : (
-                  <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", margin: 0, padding: "6px 0" }}>먼저 매수 기준선을 설정해주세요</p>
+                  <p style={{ fontSize: 12, color: "var(--color-text-tertiary)", margin: 0, padding: "6px 0" }}>열린 포지션이 없어 선만 저장됩니다</p>
                 )}
               </div>
             )}
           </div>
-
-          {/* 추세선 두 점 */}
-          {isTrend && pendingPoints?.length === 2 && (
-            <div style={{ background: "var(--color-background-secondary)", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-              {pendingPoints.map((p, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#00e676", background: "rgba(0,230,118,0.12)", borderRadius: 4, padding: "2px 6px", flexShrink: 0 }}>P{i + 1}</span>
-                  <input type="number" value={p.price} onChange={(e) => { if (!onUpdatePoints) return; const updated = [...pendingPoints]; updated[i] = { ...updated[i], price: Number(e.target.value) }; onUpdatePoints(updated); }}
-                    style={{ flex: 1, fontSize: 14, fontWeight: 600, padding: "8px 10px", border: B, borderRadius: 8, outline: "none", boxSizing: "border-box", color: "var(--color-text-primary)", background: "var(--color-background-primary)" }} />
-                </div>
-              ))}
-              <p style={{ margin: 0, fontSize: 11, color: "var(--color-text-tertiary)" }}>클릭 위치가 부정확하면 가격을 직접 수정하세요.</p>
-            </div>
-          )}
-
-          {/* 가격 (수평선) */}
-          {!isTrend && (
-            <div>
-              <label style={{ fontSize: 12, color: "var(--color-text-secondary)", display: "block", marginBottom: 8 }}>가격</label>
-              <input type="number" placeholder={currentPrice ? `현재가: ${currentPrice.toLocaleString()}` : "예: 70000"} value={price} onChange={(e) => setPrice(e.target.value)}
-                style={{ width: "100%", fontSize: 16, fontWeight: 600, padding: "12px 14px", border: B, borderRadius: 10, outline: "none", boxSizing: "border-box", color: "var(--color-text-primary)", background: "var(--color-background-secondary)" }} />
-              <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--color-text-tertiary)" }}>현재가보다 낮으면 지지선, 높으면 저항선으로 자동 분류됩니다.</p>
-            </div>
-          )}
 
           {/* 이름 */}
           <div>
@@ -237,8 +260,8 @@ export default function AddLineModal({
           </div>
 
           {/* 저장 */}
-          <button onClick={handleSave} disabled={!canSave || intentDisabled || saving}
-            style={{ width: "100%", padding: "14px 0", fontSize: 15, fontWeight: 700, background: "var(--color-text-primary)", color: "var(--color-background-primary)", border: "none", borderRadius: 12, cursor: "pointer", opacity: !canSave || intentDisabled || saving ? 0.4 : 1 }}>
+          <button onClick={handleSave} disabled={!canSave || saving}
+            style={{ width: "100%", padding: "14px 0", fontSize: 15, fontWeight: 700, background: "var(--color-text-primary)", color: "var(--color-background-primary)", border: "none", borderRadius: 12, cursor: "pointer", opacity: !canSave || saving ? 0.4 : 1 }}>
             {saving ? "저장 중..." : "저장"}
           </button>
         </div>

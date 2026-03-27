@@ -54,12 +54,8 @@ export default function PositionModal({ position, currentPrice, onClose, onSaved
     }
   };
 
-  const handleUnlinkLine = async (role) => {
-    const updates = {};
-    if (role === "entry") { updates.entry_line_id = null; }
-    if (role === "tp") { updates.tp_line_id = null; }
-    if (role === "sl") { updates.sl_line_id = null; }
-    await updatePosition(position.id, updates);
+  const handleUnlinkLine = async (lineId) => {
+    await updatePosition(position.id, { remove_lines: [lineId] });
     onSaved();
     onClose();
   };
@@ -70,9 +66,11 @@ export default function PositionModal({ position, currentPrice, onClose, onSaved
     onClose();
   };
 
-  const entryLineName = position?.entry_line?.name || (position?.entry_line?.signal_type === "loss" ? "지지선" : "진입선");
-  const tpLineName = position?.tp_line?.name || "목표선";
-  const slLineName = position?.sl_line?.name || "손절선";
+  // position_lines를 role별로 그룹핑
+  const grouped = { entry: [], tp: [], sl: [] };
+  (position?.position_lines || []).forEach(pl => {
+    if (pl.line && grouped[pl.role]) grouped[pl.role].push(pl);
+  });
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -94,44 +92,78 @@ export default function PositionModal({ position, currentPrice, onClose, onSaved
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", display: "block", marginBottom: 8 }}>연결된 선</label>
             {[
-              { label: "매수선", line: position?.entry_line, name: entryLineName, role: "entry" },
-              { label: "매도선", line: position?.tp_line, name: tpLineName, role: "tp" },
-              { label: "손절선", line: position?.sl_line, name: slLineName, role: "sl" },
-            ].map(({ label, line, name, role }) => (
-              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "6px 0" }}>
+              { label: "매수선", lines: grouped.entry },
+              { label: "매도선", lines: grouped.tp },
+              { label: "손절선", lines: grouped.sl },
+            ].map(({ label, lines }) => (
+              <div key={label} style={{ fontSize: 12, padding: "6px 0" }}>
                 <span style={{ color: "var(--color-text-tertiary)" }}>{label}</span>
-                {line ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ color: "var(--color-text-primary)", fontWeight: 600 }}>{name} · {fmtPrice(line.price)}</span>
-                    <button onClick={() => handleUnlinkLine(role)} style={{ border: "none", background: "none", cursor: "pointer", padding: "2px", fontSize: 14, color: "var(--color-text-tertiary)", lineHeight: 1 }}>×</button>
+                {lines.length > 0 ? lines.map((pl) => (
+                  <div key={pl.line.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4, paddingLeft: 8 }}>
+                    <span style={{ color: "var(--color-text-primary)", fontWeight: 600 }}>
+                      {pl.line.name || (pl.line.signal_type === "loss" ? "지지선" : "저항선")} · {fmtPrice(pl.line.price)}
+                    </span>
+                    <button onClick={() => handleUnlinkLine(pl.line.id)} style={{ border: "none", background: "none", cursor: "pointer", padding: "2px", fontSize: 14, color: "var(--color-text-tertiary)", lineHeight: 1 }}>×</button>
                   </div>
-                ) : (
-                  <span style={{ color: "var(--color-text-quaternary)" }}>미연결</span>
+                )) : (
+                  <span style={{ color: "var(--color-text-quaternary)", marginLeft: 8 }}>미연결</span>
                 )}
               </div>
             ))}
           </div>
 
-          {/* 가격 */}
+          {/* 실제 거래 기록 */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", display: "block", marginBottom: 8 }}>가격</label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", display: "block", marginBottom: 4 }}>거래 기록</label>
+            <p style={{ margin: "0 0 8px", fontSize: 10, color: "var(--color-text-quaternary)" }}>실제 체결 가격을 입력하면 수익률이 계산됩니다</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {[
-                { label: "매입가", value: entryPrice, setter: setEntryPrice },
-                { label: "목표가", value: tpPrice, setter: setTpPrice, reached: tpReached, reachedLabel: "✓ 도달", reachedColor: "#22c55e" },
-                { label: "손절가", value: slPrice, setter: setSlPrice, reached: slReached, reachedLabel: "✗ 도달", reachedColor: "#ef4444" },
-                { label: "매도가", value: exitPrice, setter: setExitPrice },
-              ].map(({ label, value, setter, reached, reachedLabel, reachedColor }) => (
+                { label: "체결가 (매수)", value: entryPrice, setter: setEntryPrice, placeholder: "매수 체결가" },
+                { label: "체결가 (매도)", value: exitPrice, setter: setExitPrice, placeholder: "매도 체결가" },
+              ].map(({ label, value, setter, placeholder }) => (
+                <div key={label} style={{ padding: "8px 10px", background: "var(--color-background-secondary)", borderRadius: 8 }}>
+                  <span style={{ fontSize: 10, color: "var(--color-text-tertiary)", display: "block", marginBottom: 4 }}>{label}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <input type="number" inputMode="decimal" value={value} onChange={(e) => setter(e.target.value)} placeholder={placeholder}
+                      style={{ flex: 1, fontSize: 13, fontWeight: 600, padding: "2px 0", border: "none", outline: "none", boxSizing: "border-box", color: "var(--color-text-primary)", background: "transparent" }} />
+                    {currentPrice > 0 && (
+                      <button type="button" onClick={() => setter(String(currentPrice))}
+                        style={{ padding: "2px 6px", fontSize: 9, fontWeight: 600, borderRadius: 4, border: "none", cursor: "pointer", background: "var(--color-text-info)", color: "#fff", whiteSpace: "nowrap", opacity: Number(value) === currentPrice ? 0.4 : 1 }}>
+                        현재가
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 감시 설정 */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", display: "block", marginBottom: 4 }}>감시 설정</label>
+            <p style={{ margin: "0 0 8px", fontSize: 10, color: "var(--color-text-quaternary)" }}>도달 시 알림을 받습니다</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[
+                { label: "목표가", value: tpPrice, setter: setTpPrice, reached: tpReached, reachedLabel: "도달", reachedColor: "#22c55e", placeholder: "익절 목표" },
+                { label: "손절가", value: slPrice, setter: setSlPrice, reached: slReached, reachedLabel: "도달", reachedColor: "#ef4444", placeholder: "손절 기준" },
+              ].map(({ label, value, setter, reached, reachedLabel, reachedColor, placeholder }) => (
                 <div key={label} style={{ padding: "8px 10px", background: "var(--color-background-secondary)", borderRadius: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
                     <span style={{ fontSize: 10, color: "var(--color-text-tertiary)" }}>{label}</span>
                     {reached && <span style={{ fontSize: 10, color: reachedColor, fontWeight: 600 }}>{reachedLabel}</span>}
                   </div>
-                  <input type="number" inputMode="decimal" value={value} onChange={(e) => setter(e.target.value)} placeholder={label}
+                  <input type="number" inputMode="decimal" value={value} onChange={(e) => setter(e.target.value)} placeholder={placeholder}
                     style={{ width: "100%", fontSize: 13, fontWeight: 600, padding: "2px 0", border: "none", outline: "none", boxSizing: "border-box", color: "var(--color-text-primary)", background: "transparent" }} />
                 </div>
               ))}
             </div>
+            {/* 역방향 설정 경고 */}
+            {currentPrice > 0 && tpPrice && Number(tpPrice) > 0 && Number(tpPrice) <= currentPrice && (
+              <p style={{ margin: "4px 0 0", fontSize: 11, color: "#f97316", lineHeight: 1.4 }}>목표가가 현재가보다 낮아 즉시 도달 처리될 수 있습니다</p>
+            )}
+            {currentPrice > 0 && slPrice && Number(slPrice) > 0 && Number(slPrice) >= currentPrice && (
+              <p style={{ margin: "4px 0 0", fontSize: 11, color: "#f97316", lineHeight: 1.4 }}>손절가가 현재가보다 높아 즉시 손절 처리될 수 있습니다</p>
+            )}
           </div>
 
           {/* 수익률 */}
