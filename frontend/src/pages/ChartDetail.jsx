@@ -910,9 +910,10 @@ export default function ChartDetail() {
                       {stats.touch_count}회 터치
                     </span>
                   );
+                  const period = PERIOD_LABEL[line.timeframe] || "이후";
                   return (
                     <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 20, background: er >= 0 ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)", color: er >= 0 ? "#22c55e" : "#ef4444" }}>
-                      기대 {er >= 0 ? "+" : ""}{er}%
+                      {period} {er >= 0 ? "+" : ""}{er}%
                     </span>
                   );
                 })()}

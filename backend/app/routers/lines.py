@@ -70,14 +70,6 @@ _STATS_PERIOD_DAYS = {
 }
 
 
-def _confidence_level(decisive: int) -> str:
-    if decisive >= 20:
-        return "verified"
-    if decisive >= 10:
-        return "high"
-    if decisive >= 5:
-        return "mid"
-    return "low"
 
 
 def _calc_weighted_bounce_rate(bounce_list: list, break_list: list) -> float:
@@ -153,8 +145,6 @@ async def get_line_stats(line_id: str):
         maintain_list = [t for t in touches if t["result"] == "maintain"]
         maintain_count = len(maintain_list)
         decisive = maintain_count + break_count
-        is_sufficient = decisive >= 5
-        confidence = _confidence_level(decisive)
 
         result = {
             "line_type": "trend",
@@ -163,13 +153,10 @@ async def get_line_stats(line_id: str):
             "maintain_count": maintain_count,
             "break_count": break_count,
             "decisive": decisive,
-            "is_sufficient": is_sufficient,
-            "confidence": confidence,
         }
-        if is_sufficient:
+        if decisive > 0:
             validity = maintain_count / decisive
             result["validity"] = round(validity, 2)
-            # maintain 케이스의 평균 수익률
             avg_pct_move = sum(t["pct_move"] for t in maintain_list) / maintain_count if maintain_count > 0 else 0.0
             result["avg_pct_move"] = round(avg_pct_move, 2)
             result["expected_return"] = round(validity * avg_pct_move, 2)
@@ -182,8 +169,6 @@ async def get_line_stats(line_id: str):
         bounce_count = len(bounce_list)
         neutral_count = len(neutral_list)
         decisive = bounce_count + break_count
-        is_sufficient = decisive >= 5
-        confidence = _confidence_level(decisive)
 
         result = {
             "line_type": "horizontal",
@@ -193,10 +178,8 @@ async def get_line_stats(line_id: str):
             "break_count": break_count,
             "neutral_count": neutral_count,
             "decisive": decisive,
-            "is_sufficient": is_sufficient,
-            "confidence": confidence,
         }
-        if is_sufficient:
+        if decisive > 0:
             weighted_bounce_rate = _calc_weighted_bounce_rate(bounce_list, break_list)
             avg_pct_move = sum(t["pct_move"] for t in bounce_list) / bounce_count if bounce_count > 0 else 0.0
             result["bounce_rate"] = round(weighted_bounce_rate, 2)
